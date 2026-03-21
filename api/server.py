@@ -20,10 +20,12 @@ from typing import Optional, Any
 from enum import Enum
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import shutil
+import subprocess
 
 # 导入核心模块
 import sys
@@ -165,6 +167,106 @@ class CreateProjectRequest(BaseModel):
 class ReviewDecisionRequest(BaseModel):
     approved: bool
     scenes: Optional[list[dict]] = None          # 修改后的分镜数据（如果有修改）
+
+
+# ============================================================
+# 文件上传 API（角色参考图）
+# ============================================================
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "uploads", "references")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def _extract_frame_from_video(video_path: str, output_path: str) -> str:
+    """
+    从视频中提取最清晰的一帧作为参考图。
+    策略：取视频 1/3 处的帧（通常比第一帧更有代表性）
+    """
+    try:
+        # 获取视频时长
+        probe_cmd = [
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_format", video_path
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        duration = 1.0
+        if probe_result.returncode == 0:
+            import json as _json
+            info = _json.loads(probe_result.stdout)
+            duration = float(info.get("format", {}).get("duration", 3.0))
+
+        # 取 1/3 处的帧
+        seek_time = duration / 3
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(seek_time),
+            "-i", video_path,
+            "-vframes", "1",
+            "-q:v", "1",  # 最高质量 JPEG
+            output_path
+        ]
+        subprocess.run(cmd, capture_output=True, check=True)
+        return output_path
+    except Exception as e:
+        raise RuntimeError(f"视频截帧失败: {e}")
+
+
+@app.post("/api/upload/reference")
+async def upload_reference_image(
+    file: UploadFile = File(...),
+):
+    """
+    上传角色参考图（图片或视频）。
+    - 图片：直接保存
+    - 视频：自动提取最清晰的一帧
+    返回保存后的文件路径，供创建项目时传入 reference_images。
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名为空")
+
+    # 生成唯一文件名
+    ext = Path(file.filename).suffix.lower()
+    unique_name = f"{uuid.uuid4().hex[:12]}{ext}"
+    save_path = os.path.join(UPLOAD_DIR, unique_name)
+
+    # 保存上传文件
+    with open(save_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    # 判断是否为视频文件
+    video_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv"}
+    image_exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+
+    if ext in video_exts:
+        # 从视频中提取帧
+        frame_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex[:12]}_frame.jpg")
+        try:
+            _extract_frame_from_video(save_path, frame_path)
+            # 删除原视频节省空间
+            os.remove(save_path)
+            return {
+                "path": os.path.abspath(frame_path),
+                "filename": os.path.basename(frame_path),
+                "type": "video_frame",
+                "message": "已从视频中提取参考帧"
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"视频截帧失败: {str(e)}")
+    elif ext in image_exts:
+        return {
+            "path": os.path.abspath(save_path),
+            "filename": unique_name,
+            "type": "image",
+            "message": "参考图已上传"
+        }
+    else:
+        os.remove(save_path)
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式: {ext}。支持的格式: {', '.join(image_exts | video_exts)}"
+        )
 
 
 class UpdateApiKeysRequest(BaseModel):

@@ -105,7 +105,17 @@ async def generate_keyframe(
         if ref_parts:
             contents.extend(ref_parts)
             contents.append(types.Part.from_text(
-                text="Please maintain the appearance, style and characteristics of the subjects shown in the reference images above."
+                text=(
+                    "CRITICAL CHARACTER CONSISTENCY INSTRUCTION: "
+                    "The reference image(s) above show the EXACT character(s) that MUST appear in the generated image. "
+                    "You MUST preserve: 1) The EXACT same face, facial features, and facial structure. "
+                    "2) The EXACT same hairstyle, hair color, and hair length. "
+                    "3) The EXACT same clothing, accessories, glasses, hats, and other distinctive items. "
+                    "4) The EXACT same body type and proportions. "
+                    "5) The EXACT same skin tone and complexion. "
+                    "The character should look like the SAME PERSON in a different scene/pose, NOT a different person. "
+                    "This is the highest priority requirement — character identity must be preserved above all else."
+                )
             ))
 
     # 添加风格参考图
