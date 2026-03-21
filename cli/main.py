@@ -409,6 +409,252 @@ def script(topic, style, duration, output, verbose):
 
 
 # ============================================================
+# test 命令：逐模块 API 连接测试
+# ============================================================
+
+ALL_MODULES = ["llm", "image", "tts", "video", "ffmpeg"]
+
+
+@cli.command()
+@click.option("--module", "-m", default="all",
+              type=click.Choice(["all"] + ALL_MODULES),
+              help="要测试的模块（默认 all 全部）")
+@click.option("--verbose", is_flag=True, default=False, help="显示详细日志")
+def test(module, verbose):
+    """
+    逐模块 API 连接测试
+
+    快速验证各 API Key 是否可用，无需走完整工作流。
+
+    示例：
+      pilipili test                    # 测试全部模块
+      pilipili test --module llm       # 只测试 LLM
+      pilipili test --module video     # 只测试 Kling/Seedance
+    """
+    console.print(LOGO)
+    config = get_config()
+
+    modules_to_test = ALL_MODULES if module == "all" else [module]
+
+    results = []
+    for mod in modules_to_test:
+        console.print(f"\n[bold cyan]── 测试模块: {mod.upper()} ──[/bold cyan]")
+        ok, msg = _test_module(mod, config, verbose)
+        status = "[green]✓ 通过[/green]" if ok else "[red]✗ 失败[/red]"
+        console.print(f"  {status}  {msg}")
+        results.append((mod, ok, msg))
+
+    # 汇总
+    console.print("\n")
+    table = Table(title="测试结果汇总", show_lines=True)
+    table.add_column("模块", style="bold", width=10)
+    table.add_column("状态", width=8)
+    table.add_column("详情", width=50)
+    for mod, ok, msg in results:
+        table.add_row(
+            mod.upper(),
+            "✓ 通过" if ok else "✗ 失败",
+            msg,
+        )
+    console.print(table)
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    total = len(results)
+    if passed == total:
+        console.print(f"\n[bold green]全部 {total} 个模块测试通过！[/bold green]")
+    else:
+        console.print(f"\n[bold yellow]{passed}/{total} 个模块通过，{total - passed} 个失败[/bold yellow]")
+        sys.exit(1)
+
+
+def _test_module(module: str, config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
+    """测试单个模块，返回 (是否通过, 描述信息)"""
+    try:
+        if module == "llm":
+            return _test_llm(config, verbose)
+        elif module == "image":
+            return _test_image(config, verbose)
+        elif module == "tts":
+            return _test_tts(config, verbose)
+        elif module == "video":
+            return _test_video(config, verbose)
+        elif module == "ffmpeg":
+            return _test_ffmpeg(config, verbose)
+        else:
+            return False, f"未知模块: {module}"
+    except Exception as e:
+        return False, f"异常: {e}"
+
+
+def _test_llm(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
+    """测试 LLM API 连接"""
+    from core.config import get_active_llm_config
+    provider = config.llm.default_provider
+    provider_cfg = get_active_llm_config(config)
+
+    if not provider_cfg.api_key and provider != "ollama":
+        return False, f"{provider} API Key 未配置"
+
+    from openai import OpenAI
+    if provider == "gemini":
+        client = OpenAI(
+            api_key=provider_cfg.api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+    else:
+        client = OpenAI(
+            api_key=provider_cfg.api_key,
+            base_url=provider_cfg.base_url or "https://api.openai.com/v1"
+        )
+
+    resp = client.chat.completions.create(
+        model=provider_cfg.model,
+        messages=[{"role": "user", "content": "请回复'连接成功'四个字"}],
+        max_tokens=20,
+    )
+    reply = resp.choices[0].message.content.strip()
+    return True, f"{provider}/{provider_cfg.model} → {reply}"
+
+
+def _test_image(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
+    """测试 Gemini 图像生成 API 连接"""
+    if not config.image_gen.api_key:
+        return False, "Gemini (image_gen) API Key 未配置"
+
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=config.image_gen.api_key)
+
+    # 用一个极简提示词测试连接（只生成一张小图）
+    response = client.models.generate_content(
+        model=config.image_gen.model,
+        contents="Generate a tiny 64x64 red square image",
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE", "TEXT"],
+        )
+    )
+
+    has_image = False
+    for part in response.candidates[0].content.parts:
+        if part.inline_data is not None:
+            has_image = True
+            break
+
+    if has_image:
+        return True, f"{config.image_gen.model} 图像生成正常"
+    else:
+        return False, "API 响应中无图片数据"
+
+
+def _test_tts(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
+    """测试 MiniMax TTS API 连接"""
+    if not config.tts.api_key:
+        return False, "MiniMax TTS API Key 未配置"
+
+    import requests
+    payload = {
+        "model": config.tts.model,
+        "text": "测试",
+        "stream": False,
+        "voice_setting": {
+            "voice_id": config.tts.default_voice,
+            "speed": 1.0,
+            "vol": 1.0,
+            "pitch": 0,
+        },
+        "audio_setting": {
+            "sample_rate": 32000,
+            "bitrate": 128000,
+            "format": "mp3",
+            "channel": 1,
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {config.tts.api_key}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(
+        "https://api.minimax.chat/v1/t2a_v2",
+        json=payload,
+        headers=headers,
+        timeout=30,
+    )
+    result = resp.json()
+    if "data" in result and "audio" in result["data"]:
+        audio_len = len(result["data"]["audio"]) // 2  # hex → bytes
+        return True, f"speech-02-hd 正常，测试音频 {audio_len} bytes"
+    else:
+        return False, f"API 响应异常: {str(result)[:120]}"
+
+
+def _test_video(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
+    """测试 Kling/Seedance 视频生成 API 连接（仅验证认证，不提交生成任务）"""
+    provider = config.video_gen.default_provider
+
+    if provider == "kling":
+        kling_cfg = config.video_gen.kling
+        if not kling_cfg.api_key or not kling_cfg.api_secret:
+            return False, "Kling API Key 或 Secret 未配置"
+
+        from modules.video_gen import _generate_kling_jwt
+        token = _generate_kling_jwt(kling_cfg.api_key, kling_cfg.api_secret)
+
+        # 调用 Kling 查询接口验证 Token 有效性
+        import requests
+        url = f"{kling_cfg.base_url}/v1/videos/image2video/nonexistent_task_id"
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.get(url, headers=headers, timeout=15)
+
+        try:
+            result = resp.json()
+        except Exception:
+            return False, f"Kling API 返回非 JSON (HTTP {resp.status_code}): {resp.text[:100]}"
+
+        # code=0 表示认证通过（即使 task 不存在）
+        # code 不为 0 但不是认证错误也算通过
+        code = result.get("code", -1)
+        msg = result.get("message", "")
+
+        # 认证失败通常返回 401 或特定 code
+        if resp.status_code == 401:
+            return False, f"Kling 认证失败: {msg}"
+        if code in [-1000, -1001, -1002]:  # 常见认证错误码
+            return False, f"Kling 认证失败 (code={code}): {msg}"
+
+        return True, f"Kling JWT 认证通过 (base_url={kling_cfg.base_url}, code={code}, msg={msg})"
+
+    elif provider == "seedance":
+        seedance_cfg = config.video_gen.seedance
+        if not seedance_cfg.api_key:
+            return False, "Seedance (Volcengine) API Key 未配置"
+        return True, f"Seedance API Key 已配置 (base_url={seedance_cfg.base_url})"
+
+    else:
+        return False, f"未知视频引擎: {provider}"
+
+
+def _test_ffmpeg(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
+    """测试 FFmpeg 是否可用"""
+    import subprocess
+    ffmpeg_path = config.local.ffmpeg_path or "ffmpeg"
+    try:
+        result = subprocess.run(
+            [ffmpeg_path, "-version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            # 提取版本号
+            first_line = result.stdout.split("\n")[0]
+            return True, first_line
+        else:
+            return False, f"FFmpeg 返回错误码 {result.returncode}"
+    except FileNotFoundError:
+        return False, f"FFmpeg 未找到 (路径: {ffmpeg_path})，请安装 FFmpeg"
+    except Exception as e:
+        return False, f"FFmpeg 测试异常: {e}"
+
+
+# ============================================================
 # 辅助函数
 # ============================================================
 
