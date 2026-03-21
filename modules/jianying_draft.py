@@ -12,10 +12,24 @@
 import os
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 from modules.llm import Scene, VideoScript
+
+
+def _get_media_duration(filepath: str) -> Optional[float]:
+    """用 ffprobe 获取媒体文件实际时长（秒），失败返回 None"""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', filepath],
+            capture_output=True, text=True, timeout=10,
+        )
+        info = json.loads(result.stdout)
+        return float(info['format']['duration'])
+    except Exception:
+        return None
 
 
 def generate_jianying_draft(
@@ -52,6 +66,12 @@ def generate_jianying_draft(
         return _generate_edl_fallback(
             script, video_clips, audio_clips, output_dir, project_name, verbose
         )
+    except Exception as e:
+        if verbose:
+            print(f"[JianyingDraft] pyJianYingDraft 生成失败 ({e})，回退到 EDL 格式")
+        return _generate_edl_fallback(
+            script, video_clips, audio_clips, output_dir, project_name, verbose
+        )
 
 
 def _generate_with_pyjianyingdraft(
@@ -64,15 +84,31 @@ def _generate_with_pyjianyingdraft(
 ) -> str:
     """使用 pyJianYingDraft 生成标准剪映草稿"""
     import pyJianYingDraft as draft
-    from pyJianYingDraft import trange, Intro_type, Track_type
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # 创建草稿
-    jy_draft = draft.Script_file(1920, 1080)
+    # 使用 DraftFolder API 创建草稿（推荐方式）
+    draft_folder = draft.DraftFolder(output_dir)
+    # 清理同名草稿
+    safe_name = "".join(c for c in project_name if c not in r'\/:*?"<>|').strip() or "pilipili"
+    if draft_folder.has_draft(safe_name):
+        draft_folder.remove(safe_name)
+    jy_draft = draft_folder.create_draft(
+        draft_name=safe_name,
+        width=1920,
+        height=1080,
+        fps=30,
+        maintrack_adsorb=True,
+        allow_replace=True,
+    )
 
-    # 当前时间轴位置（微秒）
-    current_us = 0
+    # 创建轨道（必须在 add_segment 之前调用）
+    jy_draft.add_track(draft.TrackType.video)       # 主视频轨道
+    jy_draft.add_track(draft.TrackType.audio, "配音")  # 音频轨道
+    jy_draft.add_track(draft.TrackType.text, "字幕")   # 字幕轨道
+
+    # 当前时间轴位置（秒）
+    current_s = 0.0
 
     for scene in script.scenes:
         video_path = video_clips.get(scene.scene_id)
@@ -81,56 +117,57 @@ def _generate_with_pyjianyingdraft(
         if not video_path or not os.path.exists(video_path):
             continue
 
-        # 时长（微秒）
-        duration_us = int(scene.duration * 1_000_000)
+        # 时长（秒）
+        duration_s = scene.duration
 
-        # 添加视频片段
-        video_material = draft.Video_material(video_path)
-        video_segment = draft.Video_segment(
-            video_material,
-            trange(f"{current_us}us", f"{duration_us}us"),
-            source_timerange=trange("0us", f"{duration_us}us"),
+        # 添加视频片段到主轨道
+        video_material = draft.VideoMaterial(os.path.abspath(video_path))
+        video_segment = draft.VideoSegment(
+            material=video_material,
+            target_timerange=draft.trange(f"{current_s}s", f"{duration_s}s"),
         )
-        jy_draft.add_segment(video_segment)
+        jy_draft.add_segment(video_segment)  # 自动进入主视频轨道
 
-        # 添加配音
+        # 添加配音到音频轨道
         if audio_path and os.path.exists(audio_path):
-            audio_material = draft.Audio_material(audio_path)
-            audio_segment = draft.Audio_segment(
-                audio_material,
-                trange(f"{current_us}us", f"{duration_us}us"),
-                source_timerange=trange("0us", f"{duration_us}us"),
+            # 获取音频实际时长，避免 target_timerange 超出素材时长
+            audio_dur = _get_media_duration(audio_path) or duration_s
+            audio_material = draft.AudioMaterial(os.path.abspath(audio_path))
+            audio_segment = draft.AudioSegment(
+                material=audio_material,
+                target_timerange=draft.trange(f"{current_s}s", f"{audio_dur}s"),
                 volume=1.0,
             )
-            jy_draft.add_segment(audio_segment, track_type=Track_type.audio)
+            jy_draft.add_segment(audio_segment, "配音")
 
-        # 添加字幕
+        # 添加字幕到文字轨道
         if scene.voiceover.strip():
-            text_segment = draft.Text_segment(
-                scene.voiceover,
-                trange(f"{current_us}us", f"{duration_us}us"),
-                style=draft.Text_style(
-                    font_size=8.0,
+            text_segment = draft.TextSegment(
+                text=scene.voiceover.strip(),
+                timerange=draft.trange(f"{current_s}s", f"{duration_s}s"),
+                style=draft.TextStyle(
+                    size=8.0,
                     bold=False,
                     italic=False,
                     color=(1.0, 1.0, 1.0),  # 白色
-                    border_color=(0.0, 0.0, 0.0),  # 黑色描边
-                    border_width=0.08,
                 ),
-                clip_settings=draft.Clip_settings(transform_y=-0.85),  # 底部字幕
+                border=draft.TextBorder(
+                    color=(0.0, 0.0, 0.0),  # 黑色描边
+                    width=40.0,
+                ),
+                clip_settings=draft.ClipSettings(transform_y=-0.85),  # 底部字幕
             )
-            jy_draft.add_segment(text_segment, track_type=Track_type.text)
+            jy_draft.add_segment(text_segment, "字幕")
 
-        current_us += duration_us
+        current_s += duration_s
 
     # 保存草稿
-    draft_path = os.path.join(output_dir, f"{project_name}.draft")
-    jy_draft.dumps(draft_path)
+    jy_draft.save()
 
     if verbose:
-        print(f"[JianyingDraft] 剪映草稿已生成: {draft_path}")
+        print(f"[JianyingDraft] 剪映草稿已生成: {output_dir}/{safe_name}")
 
-    return draft_path
+    return os.path.join(output_dir, safe_name)
 
 
 def _generate_edl_fallback(
@@ -224,13 +261,13 @@ def _generate_edl_fallback(
 
 导入剪映步骤：
 1. 打开剪映专业版
-2. 新建项目（1920x1080，25fps）
+2. 新建项目（1920x1080，30fps）
 3. 将所有视频片段按顺序导入素材库
 4. 参考 _project.json 中的顺序和时长手动排列
 5. 导入 .srt 字幕文件
 
 导入 Premiere Pro 步骤：
-1. 新建序列（1920x1080，25fps）
+1. 新建序列（1920x1080，30fps）
 2. 文件 → 导入 → 选择 .edl 文件
 3. 将素材文件夹指定为视频片段所在目录
 

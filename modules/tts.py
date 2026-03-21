@@ -133,9 +133,10 @@ async def generate_voiceover(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Accept-Encoding": "gzip, deflate",  # 禁用 br 编码，避免 aiohttp brotli 解码问题
     }
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(auto_decompress=True) as session:
         async with session.post(MINIMAX_TTS_URL, json=payload, headers=headers) as resp:
             if resp.status != 200:
                 error_text = await resp.text()

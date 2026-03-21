@@ -68,13 +68,17 @@ def smart_route_engine(scene: Scene, default: str = "kling") -> str:
 # ============================================================
 
 def _generate_kling_jwt(api_key: str, api_secret: str) -> str:
-    """生成 Kling API JWT Token"""
+    """生成 Kling API JWT Token（遵循官方文档，显式传 headers）"""
+    jwt_headers = {
+        "alg": "HS256",
+        "typ": "JWT",
+    }
     payload = {
         "iss": api_key,
         "exp": int(time.time()) + 1800,
         "nbf": int(time.time()) - 5,
     }
-    return jwt.encode(payload, api_secret, algorithm="HS256")
+    return jwt.encode(payload, api_secret, algorithm="HS256", headers=jwt_headers)
 
 
 async def _submit_kling_i2v(
@@ -124,10 +128,14 @@ async def _submit_kling_i2v(
     }
 
     async with session.post(url, json=payload, headers=headers) as resp:
-        result = await resp.json()
+        resp_text = await resp.text()
+        try:
+            result = json.loads(resp_text)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"Kling API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
 
     if result.get("code") != 0:
-        raise RuntimeError(f"Kling 任务提交失败: {result}")
+        raise RuntimeError(f"Kling 任务提交失败 (code={result.get('code')}, msg={result.get('message')}): {result}")
 
     return result["data"]["task_id"]
 
@@ -151,10 +159,14 @@ async def _poll_kling_task(
         headers = {"Authorization": f"Bearer {token}"}
 
         async with session.get(url, headers=headers) as resp:
-            result = await resp.json()
+            resp_text = await resp.text()
+            try:
+                result = json.loads(resp_text)
+            except json.JSONDecodeError:
+                raise RuntimeError(f"Kling 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
 
         if result.get("code") != 0:
-            raise RuntimeError(f"Kling 任务查询失败: {result}")
+            raise RuntimeError(f"Kling 任务查询失败 (code={result.get('code')}, msg={result.get('message')}): {result}")
 
         status = result["data"]["task_status"]
 
@@ -224,7 +236,11 @@ async def _submit_seedance_i2v(
     }
 
     async with session.post(url, json=payload, headers=headers) as resp:
-        result = await resp.json()
+        resp_text = await resp.text()
+        try:
+            result = json.loads(resp_text)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"Seedance API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
 
     if "id" not in result:
         raise RuntimeError(f"Seedance 任务提交失败: {result}")
@@ -247,7 +263,11 @@ async def _poll_seedance_task(
 
     while time.time() - start_time < timeout:
         async with session.get(url, headers=headers) as resp:
-            result = await resp.json()
+            resp_text = await resp.text()
+            try:
+                result = json.loads(resp_text)
+            except json.JSONDecodeError:
+                raise RuntimeError(f"Seedance 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
 
         status = result.get("status", "")
 

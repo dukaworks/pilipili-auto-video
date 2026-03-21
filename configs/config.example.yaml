@@ -55,7 +55,7 @@ video_gen:
     api_key: "YOUR_KLING_API_KEY"
     api_secret: "YOUR_KLING_API_SECRET"
     model: "kling-v3"
-    base_url: "https://api.klingai.com"
+    base_url: "https://api-beijing.klingai.com"   # 国内版；国际版用 https://api-singapore.klingai.com
     default_duration: 5          # 秒，会被 TTS 时长动态覆盖
     default_ratio: "16:9"
     default_quality: "high"

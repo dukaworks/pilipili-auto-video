@@ -387,6 +387,7 @@ class TestJianyingDraft:
 # 端到端测试（需要所有 API Keys）
 # ============================================================
 
+@pytest.mark.api
 @pytest.mark.e2e
 @pytest.mark.slow
 class TestEndToEnd:
