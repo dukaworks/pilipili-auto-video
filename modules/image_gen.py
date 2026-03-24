@@ -158,9 +158,8 @@ async def generate_keyframe(
     # -------------------------------------------------------
     FALLBACK_MODELS = [
         config.image_gen.model,                        # config 配置的主模型
-        "models/gemini-2.5-flash-preview-image-generation",  # 备选：2.5 Flash 图像生成预览
-        "models/gemini-2.0-flash-preview-image-generation",  # 备选：2.0 Flash 图像生成预览
-        "gemini-2.0-flash-exp-image-generation",              # 备选：2.0 Flash 实验图像版
+        "models/gemini-2.5-flash-image",               # 备选：2.5 Flash 图像版（经 ListModels 确认存在）
+        "models/gemini-3.1-flash-image-preview",       # 备选：3.1 Flash 图像预览（经 ListModels 确认存在）
     ]
     # 去重保序
     seen: set[str] = set()
