@@ -212,6 +212,10 @@ async def generate_all_voiceovers(
             cid = char.character_id if hasattr(char, 'character_id') else char.get('character_id')
             gender = (char.gender if hasattr(char, 'gender') else char.get('gender', 'female')) or 'female'
             char_voice_map[cid] = DEFAULT_VOICE_BY_GENDER.get(gender.lower(), "female-shaonv")
+    if verbose:
+        print(f"[TTS] char_voice_map: {char_voice_map}")
+        for s in scenes:
+            print(f"[TTS] Scene {s.scene_id} speaker_id={s.speaker_id} -> voice={char_voice_map.get(s.speaker_id, voice_id or 'default')}")
 
     semaphore = asyncio.Semaphore(max_concurrent)
     results = {}
