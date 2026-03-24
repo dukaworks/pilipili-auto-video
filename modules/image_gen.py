@@ -132,10 +132,11 @@ async def generate_keyframe(
     contents.append(types.Part.from_text(text=full_prompt))
 
     # 调用 API，503 时自动切换备用模型
+    # 图像生成 fallback 列表（均经过 ListModels 确认存在）
     FALLBACK_MODELS = [
-        config.image_gen.model,
-        "models/gemini-2.5-flash-image",
-        "models/gemini-3.1-flash-image-preview",
+        config.image_gen.model,                    # config 配置的主模型
+        "models/gemini-2.5-flash-image",           # 备选：2.5 Flash 图像版
+        "models/gemini-3.1-flash-image-preview",   # 备选：3.1 Flash 图像预览版
     ]
     # 去重保序
     seen = set()
@@ -158,11 +159,11 @@ async def generate_keyframe(
         except Exception as e:
             last_err = e
             err_str = str(e)
-            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
+            if ("503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str) and "404" not in err_str:
                 if verbose:
                     print(f"[ImageGen] 模型 {model_name} 不可用 ({err_str[:60]})，尝试下一个...")
                 continue
-            raise  # 其他错误直接抛出
+            raise  # 404/其他错误直接抛出，不尝试下一个模型
     if response is None:
         raise RuntimeError(f"Scene {scene.scene_id} 所有图像模型均不可用: {last_err}")
 

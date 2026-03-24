@@ -457,15 +457,14 @@ async def analyze_reference_video(
                 print(f"[LLM] 模型 {gemini_model} 已下线，自动切换到 gemini-2.5-flash")
             gemini_model = "gemini-2.5-flash"
         # 构建 fallback 模型列表（503/429 时自动切换）
-        # fallback 模型列表：优先用 config 配置的模型，依次降级到资源更充足的 Flash 系列
-        # Flash 系列并发容量更大，503 概率更低
+        # fallback 模型列表：优先用 config 配置的模型，503 时依次降级
+        # 注意：只列入经过 ListModels 确认存在的模型
         VIDEO_ANALYSIS_MODELS = [
-            gemini_model,                          # config 配置的模型（已经处理过下线模型）
-            "gemini-2.5-flash",                    # 最新 Flash，资源最充足
-            "gemini-2.5-flash-preview-04-17",      # Flash 预览版
-            "gemini-2.0-flash-lite",               # 轻量级 Flash，并发限制最宽松
-            "gemini-1.5-flash",                    # 稳定的 1.5 Flash（尝试中）
-            "gemini-1.5-flash-latest",             # 1.5 Flash 最新版
+            gemini_model,                          # config 配置的模型
+            "models/gemini-2.5-flash",             # 最新 Flash，资源最充足
+            "models/gemini-2.5-pro",               # Pro 级别备选
+            "models/gemini-2.0-flash",             # 2.0 Flash 稳定版
+            "models/gemini-2.0-flash-lite",        # 轻量级，并发限制最宽松
         ]
         seen = set()
         model_list = [m for m in VIDEO_ANALYSIS_MODELS if not (m in seen or seen.add(m))]
@@ -495,7 +494,7 @@ async def analyze_reference_video(
             except Exception as e:
                 last_err = e
                 err_str = str(e)
-                if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str:
+                if ("503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str) and "404" not in err_str:
                     if verbose:
                         print(f"[LLM] 模型 {model_name} 不可用 ({err_str[:80]})，尝试下一个...")
                     continue
