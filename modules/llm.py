@@ -390,10 +390,6 @@ async def analyze_reference_video(
         if verbose:
             print(f"[LLM] 上传视频到 Gemini Files API...")
 
-        # 上传视频文件
-        with open(video_path, "rb") as f:
-            video_bytes = f.read()
-
         # 确定 MIME 类型
         ext = os.path.splitext(video_path)[1].lower()
         mime_map = {
@@ -405,9 +401,9 @@ async def analyze_reference_video(
         }
         mime_type = mime_map.get(ext, "video/mp4")
 
-        # 上传到 Gemini Files API
+        # 上传到 Gemini Files API（直接传文件路径，不读 bytes）
         video_file = client.files.upload(
-            file=video_bytes,
+            file=video_path,
             config=types.UploadFileConfig(
                 mime_type=mime_type,
                 display_name=os.path.basename(video_path),
