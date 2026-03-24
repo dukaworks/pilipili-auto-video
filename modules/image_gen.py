@@ -189,28 +189,33 @@ async def generate_keyframe(
             elif verbose:
                 print(f"[ImageGen] 使用模型: {model_name}")
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    client.models.generate_content,
-                    model=model_name,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE", "TEXT"],
-                    )
+            # 重要：不能用 with 语句，否则超时后 __exit__ 会调用 shutdown(wait=True) 导致永久卡住
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(
+                client.models.generate_content,
+                model=model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE", "TEXT"],
                 )
-                try:
-                    response = future.result(timeout=IMAGE_GEN_TIMEOUT)
-                except concurrent.futures.TimeoutError:
-                    _mark_model_failed(model_name, f"超时 {IMAGE_GEN_TIMEOUT}s", verbose)
-                    last_err = TimeoutError(f"模型 {model_name} 超时")
-                    response = None
-                    if verbose:
-                        remaining = [m for m in available_models if m not in _FAILED_MODELS]
-                        if remaining:
-                            print(f"[ImageGen] Scene {scene.scene_id} 切换到下一个模型: {remaining[0]}")
-                        else:
-                            print(f"[ImageGen] Scene {scene.scene_id} 所有模型均已失败")
-                    continue
+            )
+            try:
+                response = future.result(timeout=IMAGE_GEN_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                # 放弃等待卡住的线程，直接切换下一个模型
+                executor.shutdown(wait=False, cancel_futures=True)
+                _mark_model_failed(model_name, f"超时 {IMAGE_GEN_TIMEOUT}s", verbose)
+                last_err = TimeoutError(f"模型 {model_name} 超时")
+                response = None
+                if verbose:
+                    remaining = [m for m in available_models if m not in _FAILED_MODELS]
+                    if remaining:
+                        print(f"[ImageGen] Scene {scene.scene_id} 切换到下一个模型: {remaining[0]}")
+                    else:
+                        print(f"[ImageGen] Scene {scene.scene_id} 所有模型均已失败")
+                continue
+            else:
+                executor.shutdown(wait=False)
 
             break  # 成功则退出循环
 
