@@ -162,6 +162,8 @@ class CreateProjectRequest(BaseModel):
     reference_images: Optional[list[str]] = []   # 角色参考图路径
     add_subtitles: bool = True
     auto_publish: bool = False
+    preset_scenes: Optional[list[dict]] = None   # 对标分析分镜（有则跳过 LLM 生成）
+    preset_title: Optional[str] = None           # 对标分析标题
 
 
 class ReviewDecisionRequest(BaseModel):
@@ -358,21 +360,45 @@ async def run_workflow(project_id: str, request: CreateProjectRequest):
     os.makedirs(project_dir, exist_ok=True)
 
     try:
-        # ── 阶段 1：生成脚本 ──────────────────────────────────
-        await push_status(project_id, WorkflowStage.GENERATING_SCRIPT, 5,
-                          "正在分析主题，生成视频脚本...")
-
-        # 注入记忆上下文
-        memory_context = memory.build_context_for_generation(request.topic)
-
-        script = await asyncio.to_thread(
-            generate_script_sync,
-            topic=request.topic,
-            style=request.style,
-            duration_hint=request.target_duration or 60,
-            memory_context=memory_context,
-            config=config,
-        )
+        # ── 阶段 1：生成脚本（或直接使用对标分析分镜）────────────
+        if request.preset_scenes:
+            # 对标分析模式：直接将分析分镜转换为 VideoScript，跳过 LLM
+            await push_status(project_id, WorkflowStage.GENERATING_SCRIPT, 5,
+                              "使用对标视频分析分镜，跳过 LLM 生成...")
+            preset_scene_objs = []
+            for sd in request.preset_scenes:
+                preset_scene_objs.append(Scene(
+                    scene_id=sd.get("scene_id", 0),
+                    duration=float(sd.get("duration", 5)),
+                    image_prompt=sd.get("image_prompt", ""),
+                    video_prompt=sd.get("video_prompt", ""),
+                    voiceover=sd.get("voiceover", ""),
+                    transition=sd.get("transition", "crossfade"),
+                    camera_motion=sd.get("camera_motion", "static"),
+                    style_tags=sd.get("style_tags", []),
+                    shot_mode=sd.get("shot_mode"),
+                ))
+            script = VideoScript(
+                title=request.preset_title or request.topic,
+                topic=request.topic,
+                style=request.style or "",
+                total_duration=sum(s.duration for s in preset_scene_objs),
+                scenes=preset_scene_objs,
+                metadata={},
+            )
+        else:
+            # 普通模式：LLM 生成脚本
+            await push_status(project_id, WorkflowStage.GENERATING_SCRIPT, 5,
+                              "正在分析主题，生成视频脚本...")
+            memory_context = memory.build_context_for_generation(request.topic)
+            script = await asyncio.to_thread(
+                generate_script_sync,
+                topic=request.topic,
+                style=request.style,
+                duration_hint=request.target_duration or 60,
+                memory_context=memory_context,
+                config=config,
+            )
 
         # 保存脚本到项目
         script_path = os.path.join(project_dir, "script.json")
@@ -384,7 +410,7 @@ async def run_workflow(project_id: str, request: CreateProjectRequest):
 
         await push_status(
             project_id, WorkflowStage.GENERATING_SCRIPT, 15,
-            f"脚本生成完成：《{script.title}》，共 {len(script.scenes)} 个分镜",
+            f"脚本就绪：《{script.title}》，共 {len(script.scenes)} 个分镜",
             script=script_dict
         )
 
@@ -1035,6 +1061,37 @@ async def replace_character(
     raise HTTPException(status_code=404, detail=f"人物 ID {character_id} 不存在")
 
 
+@app.delete("/api/analyze/{analysis_id}/remove-character-image")
+async def remove_character_image(
+    analysis_id: str,
+    character_id: int,
+):
+    """
+    删除某个人物的替换参考图（允许用户重新选择或不替换）
+    """
+    if analysis_id not in _reference_analyses:
+        raise HTTPException(status_code=404, detail="分析任务不存在")
+    analysis_data = _reference_analyses[analysis_id]
+    if analysis_data["status"] != "completed" or not analysis_data.get("result"):
+        raise HTTPException(status_code=400, detail="分析尚未完成")
+    characters = analysis_data["result"]["characters"]
+    for char in characters:
+        if char["character_id"] == character_id:
+            old_path = char.get("replacement_image")
+            char["replacement_image"] = None
+            # 尝试删除本地文件
+            if old_path and os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception:
+                    pass
+            return {
+                "message": f"人物 {char['name']} 的替换参考图已删除",
+                "character_id": character_id,
+            }
+    raise HTTPException(status_code=404, detail=f"人物 ID {character_id} 不存在")
+
+
 @app.post("/api/analyze/{analysis_id}/create-project")
 async def create_project_from_analysis(
     analysis_id: str,
@@ -1066,13 +1123,15 @@ async def create_project_from_analysis(
         if char.get("replacement_image") and os.path.exists(char["replacement_image"]):
             reference_images.append(char["replacement_image"])
 
-    # 构建创建请求
+    # 构建创建请求（将分析分镜直接作为 preset_scenes，跳过 LLM 生成）
     req = CreateProjectRequest(
         topic=topic or result["title"],
         style=result.get("overall_prompt", result.get("style", "")),
         video_engine=video_engine or "kling",
         reference_images=reference_images,
         add_subtitles=add_subtitles,
+        preset_scenes=result.get("scenes", []),
+        preset_title=result.get("title"),
     )
 
     project_id = str(uuid.uuid4())[:8]
