@@ -190,6 +190,280 @@ DEFAULT_VOICE_BY_GENDER = {
 NARRATOR_VOICE = "female-chengshu"  # 旁白音色：成熟女声
 
 
+def _infer_voice_from_voiceover(voiceover: str) -> str:
+    """
+    对标分析模式下，speaker_id=None 时根据旁白内容自动推断音色。
+
+    规则：
+    - 纯旁白（无男：/女：前缀）→ 旁白成熟女声
+    - 仅含男：→ 男声
+    - 仅含女：→ 少女音
+    - 混合对话（同时含男：和女：）→ 旁白成熟女声（单段无法拆分时的回退）
+    """
+    import re
+    has_male = bool(re.search(r'男[（(\w]*[）)]?[：:]', voiceover))
+    has_female = bool(re.search(r'女[（(\w]*[）)]?[：:]', voiceover))
+
+    if has_male and not has_female:
+        return DEFAULT_VOICE_BY_GENDER["male"]   # 纯男声台词
+    elif has_female and not has_male:
+        return DEFAULT_VOICE_BY_GENDER["female"]  # 纯女声台词
+    else:
+        # 纯旁白 或 男女混合对话 → 旁白成熟女声
+        return NARRATOR_VOICE
+
+
+def _split_voiceover_by_speaker(voiceover: str) -> list[tuple[str, str]]:
+    """
+    将旁白文案按说话人拆分成多段，每段包含（说话人类型, 文本）。
+
+    说话人类型：
+    - 'male'   → 男声（男：、男（英语）： 等）
+    - 'female' → 女声（女：、女（英语）： 等）
+    - 'narrator' → 旁白成熟女声（无前缀的纯旁白）
+
+    示例：
+    "女：你好。男：你好啊。女：再见。" →
+    [('female', '你好。'), ('male', '你好啊。'), ('female', '再见。')]
+    """
+    import re
+    # 匹配说话人前缀：男： / 女： / 男（xxx）： / 女（xxx）：
+    SPEAKER_PATTERN = re.compile(r'(男[（(][^）)]*[）)]：|女[（(][^）)]*[）)]：|男[：:]|女[：:])')
+
+    segments = []
+    last_end = 0
+    current_speaker = 'narrator'  # 开头无前缀就是旁白
+
+    for m in SPEAKER_PATTERN.finditer(voiceover):
+        # 先把前一段文本存起来
+        text_before = voiceover[last_end:m.start()].strip()
+        if text_before:
+            segments.append((current_speaker, text_before))
+
+        # 确定当前说话人
+        tag = m.group(0)
+        if '男' in tag:
+            current_speaker = 'male'
+        else:
+            current_speaker = 'female'
+        last_end = m.end()
+
+    # 最后一段
+    remaining = voiceover[last_end:].strip()
+    if remaining:
+        segments.append((current_speaker, remaining))
+
+    return segments if segments else [('narrator', voiceover)]
+
+
+async def _call_minimax_tts(
+    text: str,
+    voice_id: str,
+    api_key: str,
+    model: str,
+    speed: float,
+    emotion: Optional[str],
+    scene_id: int,
+    seg_idx: int,
+) -> bytes:
+    """单次 MiniMax TTS 请求，返回音频字节。"""
+    payload = {
+        "model": model,
+        "text": text,
+        "stream": False,
+        "voice_setting": {
+            "voice_id": voice_id,
+            "speed": speed,
+            "vol": 1.0,
+            "pitch": 0,
+        },
+        "audio_setting": {
+            "sample_rate": 32000,
+            "bitrate": 128000,
+            "format": "mp3",
+            "channel": 1,
+        }
+    }
+    if emotion and emotion != "neutral":
+        payload["voice_setting"]["emotion"] = emotion
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept-Encoding": "gzip, deflate",
+    }
+
+    MAX_RETRIES = 4
+    result = None
+    for attempt in range(MAX_RETRIES):
+        async with aiohttp.ClientSession(auto_decompress=True) as session:
+            async with session.post(MINIMAX_TTS_URL, json=payload, headers=headers) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise RuntimeError(f"MiniMax TTS API 错误 {resp.status}: {error_text}")
+                result = await resp.json()
+
+        base_resp = result.get("base_resp", {})
+        status_code = base_resp.get("status_code", 0)
+        if status_code in (1002, 1004):
+            wait_sec = 2 ** attempt * 5
+            await asyncio.sleep(wait_sec)
+            result = None
+            continue
+        break
+
+    if result is None:
+        raise RuntimeError(f"MiniMax TTS Scene {scene_id} seg{seg_idx} 限速重试失败")
+
+    if "data" not in result or "audio" not in result["data"]:
+        raise RuntimeError(f"MiniMax TTS 响应格式异常: {json.dumps(result)[:200]}")
+
+    return bytes.fromhex(result["data"]["audio"])
+
+
+def _concat_mp3_with_ffmpeg(segment_paths: list[str], output_path: str) -> None:
+    """
+    用 ffmpeg 将多段 MP3 拼接成一个文件。
+    Windows 和 Linux 均兼容（纯 Python subprocess）。
+    """
+    import subprocess
+    import tempfile
+    import os
+
+    if len(segment_paths) == 1:
+        import shutil
+        shutil.copy2(segment_paths[0], output_path)
+        return
+
+    # 创建临时文件列表
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+        for p in segment_paths:
+            # ffmpeg concat 要求路径用单引号包裹
+            f.write(f"file '{p}'\n")
+        list_file = f.name
+
+    try:
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", list_file,
+            "-c", "copy",
+            output_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg 拼接失败: {result.stderr[:300]}")
+    finally:
+        os.unlink(list_file)
+
+
+async def generate_voiceover_multi_speaker(
+    scene: Scene,
+    output_dir: str,
+    emotion: Optional[str] = None,
+    speed: Optional[float] = None,
+    config: Optional[PilipiliConfig] = None,
+    verbose: bool = False,
+    char_voice_map: Optional[dict] = None,
+) -> tuple[str, float]:
+    """
+    多人声线拆分合成：将旁白按男：/女：拆分成多段，分别合成，再用 ffmpeg 拼接。
+
+    如果旁白中没有说话人前缀，则直接调用单音色版本。
+    """
+    if config is None:
+        config = get_config()
+
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"scene_{scene.scene_id:03d}_voiceover.mp3")
+
+    # 断点续传
+    if os.path.exists(output_path):
+        duration = get_audio_duration(output_path)
+        if verbose:
+            print(f"[TTS] Scene {scene.scene_id} 配音已存在，时长: {duration:.2f}s")
+        return output_path, duration
+
+    voiceover_text = (scene.voiceover or "").strip()
+    if not voiceover_text:
+        if verbose:
+            print(f"[TTS] Scene {scene.scene_id} 无旁白文案，跳过")
+        return "", 0.0
+
+    api_key = config.tts.api_key
+    if not api_key:
+        raise ValueError("MiniMax API Key 未配置")
+
+    spd = speed or config.tts.speed
+    emo = emotion or config.tts.emotion
+    model = config.tts.model
+
+    # 拆分旁白
+    segments = _split_voiceover_by_speaker(voiceover_text)
+
+    # 确定每段的音色
+    def _resolve_voice(speaker_type: str) -> str:
+        if char_voice_map:
+            # 如果有角色映射，用角色映射
+            if speaker_type == 'male':
+                # 找第一个男性角色
+                for cid, voice in char_voice_map.items():
+                    if voice == DEFAULT_VOICE_BY_GENDER['male']:
+                        return voice
+            elif speaker_type == 'female':
+                for cid, voice in char_voice_map.items():
+                    if voice == DEFAULT_VOICE_BY_GENDER['female']:
+                        return voice
+        # 默认映射
+        if speaker_type == 'male':
+            return DEFAULT_VOICE_BY_GENDER['male']
+        elif speaker_type == 'female':
+            return DEFAULT_VOICE_BY_GENDER['female']
+        else:
+            return NARRATOR_VOICE
+
+    if verbose:
+        print(f"[TTS] Scene {scene.scene_id} 拆分成 {len(segments)} 段: {[(s[0], s[1][:15]) for s in segments]}")
+
+    # 并发合成所有段
+    seg_dir = os.path.join(output_dir, f"scene_{scene.scene_id:03d}_segments")
+    os.makedirs(seg_dir, exist_ok=True)
+
+    async def _gen_segment(idx: int, speaker_type: str, text: str) -> str:
+        seg_path = os.path.join(seg_dir, f"seg_{idx:03d}.mp3")
+        if os.path.exists(seg_path):
+            return seg_path
+        voice = _resolve_voice(speaker_type)
+        audio_bytes = await _call_minimax_tts(
+            text=text,
+            voice_id=voice,
+            api_key=api_key,
+            model=model,
+            speed=spd,
+            emotion=emo,
+            scene_id=scene.scene_id,
+            seg_idx=idx,
+        )
+        with open(seg_path, 'wb') as f:
+            f.write(audio_bytes)
+        if verbose:
+            print(f"[TTS] Scene {scene.scene_id} seg{idx} ({speaker_type}/{voice}) 完成")
+        return seg_path
+
+    seg_tasks = [_gen_segment(i, spk, txt) for i, (spk, txt) in enumerate(segments)]
+    seg_paths = await asyncio.gather(*seg_tasks)
+
+    # 用 ffmpeg 拼接
+    _concat_mp3_with_ffmpeg(list(seg_paths), output_path)
+
+    duration = get_audio_duration(output_path)
+    if verbose:
+        print(f"[TTS] Scene {scene.scene_id} 多人声线合成完成，时长: {duration:.2f}s，保存至: {output_path}")
+
+    return output_path, duration
+
+
 async def generate_all_voiceovers(
     scenes: list[Scene],
     output_dir: str,
@@ -233,19 +507,47 @@ async def generate_all_voiceovers(
 
     async def _generate_with_semaphore(scene: Scene):
         async with semaphore:
-            # 根据 speaker_id 自动选择音色
-            scene_voice = voice_id
-            if char_voice_map and scene.speaker_id is not None:
-                scene_voice = char_voice_map.get(scene.speaker_id, voice_id)
-            path, duration = await generate_voiceover(
-                scene=scene,
-                output_dir=output_dir,
-                voice_id=scene_voice,
-                emotion=emotion,
-                speed=speed,
-                config=config,
-                verbose=verbose,
-            )
+            voiceover_text = (scene.voiceover or "").strip()
+            if scene.speaker_id is None and voiceover_text:
+                # speaker_id=None（对标分析模式）：检查是否有多人对话
+                segments = _split_voiceover_by_speaker(voiceover_text)
+                has_multi_speaker = len(segments) > 1 or (len(segments) == 1 and segments[0][0] != 'narrator')
+                if has_multi_speaker:
+                    # 有多人对话：用拆分合成方案
+                    path, duration = await generate_voiceover_multi_speaker(
+                        scene=scene,
+                        output_dir=output_dir,
+                        emotion=emotion,
+                        speed=speed,
+                        config=config,
+                        verbose=verbose,
+                        char_voice_map=char_voice_map if char_voice_map else None,
+                    )
+                else:
+                    # 纯旁白：直接用旁白音色
+                    path, duration = await generate_voiceover(
+                        scene=scene,
+                        output_dir=output_dir,
+                        voice_id=NARRATOR_VOICE,
+                        emotion=emotion,
+                        speed=speed,
+                        config=config,
+                        verbose=verbose,
+                    )
+            else:
+                # 有 speaker_id：按角色映射选音色
+                scene_voice = voice_id
+                if char_voice_map and scene.speaker_id is not None:
+                    scene_voice = char_voice_map.get(scene.speaker_id, voice_id)
+                path, duration = await generate_voiceover(
+                    scene=scene,
+                    output_dir=output_dir,
+                    voice_id=scene_voice,
+                    emotion=emotion,
+                    speed=speed,
+                    config=config,
+                    verbose=verbose,
+                )
             results[scene.scene_id] = (path, duration)
 
     tasks = [_generate_with_semaphore(scene) for scene in scenes]
