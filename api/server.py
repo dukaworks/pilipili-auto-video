@@ -406,6 +406,10 @@ async def run_workflow(project_id: str, request: CreateProjectRequest):
     阶段 4: 图生视频
     阶段 5: 组装拼接 + 生成剪映草稿
     """
+    # 每次新任务开始时重置图像模型黑名单，避免上次任务的失败影响本次
+    from modules.image_gen import reset_failed_models
+    reset_failed_models()
+
     config = get_config()
     memory = get_memory_manager(config)
     project_dir = os.path.join(config.local.output_dir, project_id)

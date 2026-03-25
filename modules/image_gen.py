@@ -235,9 +235,24 @@ async def generate_keyframe(
                 _mark_model_failed(model_name, "503 服务不可用", verbose)
                 continue
             elif "429" in err_str:
-                # 限速，加入黑名单（本次任务内不再尝试）
-                _mark_model_failed(model_name, "429 限速", verbose)
-                continue
+                # 区分两种 429：账户超限 vs RPM 限速
+                if "spending cap" in err_str.lower() or "RESOURCE_EXHAUSTED" in err_str:
+                    # 账户额度耗尽，等待无效，直接抛出友好错误
+                    raise RuntimeError(
+                        f"Gemini API 账户额度已耗尽（spending cap exceeded）。"
+                        f"请前往 https://aistudio.google.com/ 检查并提升消费上限后重试。"
+                        f"原始错误: {err_str}"
+                    )
+                else:
+                    # RPM 限速，等待 30s 后重试当前模型（不加入黑名单）
+                    if verbose:
+                        print(f"[ImageGen] ⚠️  模型 {model_name} 触发 RPM 限速，等待 30s 后重试...")
+                    import time
+                    time.sleep(30)
+                    # 重试当前模型（通过 continue 跳过，但不加黑名单，下次循环会再试）
+                    # 注意：for 循环不会重试同一个 model_name，所以这里直接 continue 到下一个
+                    _mark_model_failed(model_name, "429 RPM 限速（已等待30s仍失败）", verbose)
+                    continue
             else:
                 raise  # 其他未知错误直接抛出
 
