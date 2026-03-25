@@ -795,6 +795,185 @@ async def update_api_keys(request: UpdateApiKeysRequest):
     return {"message": "API Keys 已更新并写入配置文件", "updated_keys": list(updates.keys())}
 
 
+@app.post("/api/projects/{project_id}/resume")
+async def resume_project(project_id: str, background_tasks: BackgroundTasks,
+                         video_engine: str = "kling", add_subtitles: bool = True):
+    """
+    断点续传：从已有的 keyframes + audio 文件直接跳到视频生成阶段。
+    适用于图片/TTS 已生成但视频生成失败的项目。
+    """
+    config = get_config()
+    project_dir = os.path.join(config.local.output_dir, project_id)
+    script_path = os.path.join(project_dir, "script.json")
+
+    if not os.path.exists(script_path):
+        raise HTTPException(status_code=404, detail=f"项目 {project_id} 不存在或 script.json 缺失")
+
+    # 注册到 _projects
+    with open(script_path, "r", encoding="utf-8") as f:
+        script_dict = json.load(f)
+
+    _projects[project_id] = {
+        "id": project_id,
+        "topic": script_dict.get("topic", script_dict.get("title", "")),
+        "created_at": datetime.now().isoformat(),
+        "status": {"stage": WorkflowStage.GENERATING_VIDEO.value, "progress": 50},
+        "script": script_dict,
+        "result": None,
+    }
+    save_project_meta(project_id)
+
+    background_tasks.add_task(run_resume_workflow, project_id, video_engine, add_subtitles)
+    return {"project_id": project_id, "message": "断点续传已启动，从视频生成阶段继续"}
+
+
+async def run_resume_workflow(project_id: str, video_engine: str = "kling", add_subtitles: bool = True):
+    """从已有 keyframes + audio 文件断点续传，直接跳到视频生成阶段"""
+    from modules.image_gen import reset_failed_models
+    reset_failed_models()
+
+    config = get_config()
+    project_dir = os.path.join(config.local.output_dir, project_id)
+
+    try:
+        # 读取脚本
+        script_path = os.path.join(project_dir, "script.json")
+        with open(script_path, "r", encoding="utf-8") as f:
+            script_dict = json.load(f)
+
+        from modules.llm import VideoScript, Scene
+        scenes = [Scene(**s) for s in script_dict["scenes"]]
+        script = VideoScript(
+            title=script_dict["title"],
+            topic=script_dict.get("topic", script_dict["title"]),
+            style=script_dict.get("style", ""),
+            total_duration=script_dict.get("total_duration", 0),
+            scenes=scenes,
+            characters=script_dict.get("characters", []),
+            metadata=script_dict.get("metadata", {}),
+        )
+
+        await push_status(project_id, WorkflowStage.GENERATING_VIDEO, 50,
+                          f"断点续传：读取已有关键帧和配音，共 {len(scenes)} 个分镜...")
+
+        # 扫描已有 keyframes
+        keyframes_dir = os.path.join(project_dir, "keyframes")
+        keyframe_paths: dict[int, str] = {}
+        if os.path.exists(keyframes_dir):
+            for fname in os.listdir(keyframes_dir):
+                if fname.startswith("scene_") and fname.endswith(("_keyframe.png", "_keyframe.jpg")):
+                    try:
+                        scene_id = int(fname.split("_")[1])
+                        keyframe_paths[scene_id] = os.path.join(keyframes_dir, fname)
+                    except (ValueError, IndexError):
+                        pass
+
+        # 扫描已有 audio，同时更新 scene duration
+        audio_dir = os.path.join(project_dir, "audio")
+        audio_paths: dict[int, str] = {}
+        from modules.tts import get_audio_duration, update_scene_durations
+        voiceover_results: dict[int, tuple[str, float]] = {}
+        if os.path.exists(audio_dir):
+            for fname in os.listdir(audio_dir):
+                if fname.startswith("scene_") and fname.endswith("_voiceover.mp3"):
+                    try:
+                        scene_id = int(fname.split("_")[1])
+                        fpath = os.path.join(audio_dir, fname)
+                        dur = get_audio_duration(fpath)
+                        audio_paths[scene_id] = fpath
+                        voiceover_results[scene_id] = (fpath, dur)
+                    except (ValueError, IndexError):
+                        pass
+
+        # 用 TTS 时长更新分镜 duration
+        if voiceover_results:
+            script.scenes = update_scene_durations(script.scenes, voiceover_results)
+
+        missing_kf = [s.scene_id for s in script.scenes if s.scene_id not in keyframe_paths]
+        if missing_kf:
+            await push_status(project_id, WorkflowStage.FAILED, 0,
+                              f"缺少分镜 {missing_kf} 的关键帧图片，无法续传",
+                              error=f"keyframes missing: {missing_kf}")
+            return
+
+        await push_status(project_id, WorkflowStage.GENERATING_VIDEO, 55,
+                          f"已加载 {len(keyframe_paths)} 张关键帧、{len(audio_paths)} 段配音，开始生成视频片段...",
+                          keyframes=list(keyframe_paths.values()))
+
+        # ── 视频生成 ──────────────────────────────────────────
+        clips_dir = os.path.join(project_dir, "clips")
+        engine = None if video_engine == "auto" else video_engine
+        auto_route = (video_engine == "auto")
+
+        video_clips = await asyncio.to_thread(
+            generate_all_video_clips_sync,
+            scenes=script.scenes,
+            keyframe_paths=keyframe_paths,
+            output_dir=clips_dir,
+            engine=engine,
+            auto_route=auto_route,
+            config=config,
+            verbose=True,
+        )
+
+        await push_status(project_id, WorkflowStage.ASSEMBLING, 80,
+                          "视频片段生成完成，开始组装最终成片...")
+
+        # ── 组装拼接 ──────────────────────────────────────────
+        output_dir = os.path.join(project_dir, "output")
+        temp_dir = os.path.join(project_dir, "temp")
+        safe_title = "".join(c for c in script.title if c not in r'\/:*?"<>|').strip() or "output"
+        final_video = os.path.join(output_dir, f"{safe_title}.mp4")
+        os.makedirs(output_dir, exist_ok=True)
+
+        plan = AssemblyPlan(
+            scenes=script.scenes,
+            video_clips=video_clips,
+            audio_clips=audio_paths,
+            output_path=final_video,
+            temp_dir=temp_dir,
+            add_subtitles=add_subtitles,
+        )
+        await asyncio.to_thread(assemble_video, plan, True)
+
+        # 剪映草稿
+        draft_dir = os.path.join(output_dir, "jianying_draft")
+        await asyncio.to_thread(
+            generate_jianying_draft,
+            script=script,
+            video_clips=video_clips,
+            audio_clips=audio_paths,
+            output_dir=draft_dir,
+            project_name=safe_title,
+            verbose=True,
+        )
+
+        result = {
+            "final_video": final_video,
+            "draft_dir": draft_dir,
+            "script": script_dict,
+            "total_duration": sum(s.duration for s in script.scenes),
+        }
+        _projects[project_id]["result"] = result
+
+        await push_status(
+            project_id, WorkflowStage.COMPLETED, 100,
+            f"🎉 视频生成完成！《{script.title}》",
+            result=result
+        )
+        save_project_meta(project_id)
+
+    except Exception as e:
+        import traceback
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        await push_status(
+            project_id, WorkflowStage.FAILED, 0,
+            f"续传工作流执行失败: {error_msg}",
+            error=traceback.format_exc()
+        )
+        save_project_meta(project_id)
+
+
 @app.get("/api/settings/keys/status")
 async def get_keys_status():
     """检查各 API Key 的配置状态"""

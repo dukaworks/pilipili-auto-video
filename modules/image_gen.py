@@ -236,8 +236,8 @@ async def generate_keyframe(
                 continue
             elif "429" in err_str:
                 # 区分两种 429：账户超限 vs RPM 限速
-                if "spending cap" in err_str.lower() or "RESOURCE_EXHAUSTED" in err_str:
-                    # 账户额度耗尽，等待无效，直接抛出友好错误
+                if "spending cap" in err_str.lower():
+                    # 账户额度耗尽（spending cap），等待无效，直接抛出友好错误
                     raise RuntimeError(
                         f"Gemini API 账户额度已耗尽（spending cap exceeded）。"
                         f"请前往 https://aistudio.google.com/ 检查并提升消费上限后重试。"
