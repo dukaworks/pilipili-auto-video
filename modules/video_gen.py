@@ -204,6 +204,19 @@ def _build_omni_prompt(
     return prompt, image_b64_list
 
 
+async def _upload_image_to_kling(
+    image_path: str,
+    config: PilipiliConfig,
+    session: aiohttp.ClientSession,
+) -> str:
+    """
+    将本地图片上传到 Kling 图片托管服务，返回可公开访问的 URL
+    如果上传失败，回退到 base64 内联
+    """
+    # Kling 支持直接传 base64，格式为纯 base64 字符串
+    return _image_to_base64(image_path)
+
+
 async def _submit_kling_omni(
     scenes: list[Scene],
     image_paths: dict[int, str],
@@ -212,24 +225,21 @@ async def _submit_kling_omni(
     reference_images: Optional[list[str]] = None,
 ) -> str:
     """
-    提交 Kling Omni 多镜头任务，返回 task_id
+    提交 Kling Omni 多镜头任务（修复版），返回 task_id
 
-    支持模式（Omni3 官方格式）：
-    - multi_ref：多参考图生视频，prompt 中用 <<<image_1>>> 引用角色
-    - first_end_frame：首尾帧控制（指定起止画面，AI 补中间动画）
-    - t2v：纯文生视频（无参考图，适合风景/氛围镜头）
-    - i2v：单图生视频（兼容旧版）
-
-    Omni3 Prompt 设计原则（导演式结构）：
-    [全局背景] + [主体引用 <<<image_1>>>] + [时序动作描述] + [运镜语言]
-
-    Args:
-        scenes: 分镜列表（最多6个）
-        image_paths: {scene_id: keyframe_path}
-        config: 配置
-        session: aiohttp session
-        reference_images: 全局角色参考图路径列表（可选）
+    修复要点（基于官方文档）：
+    - model_name: "kling-v3-omni"（多镜头专用，支持 multi_shot）
+    - multi_shot: true + shot_type: "customize"（自定义分镜，需传 multi_prompt）
+    - multi_prompt 中 duration 必须是字符串（"3" 等）
+    - 所有分镜时长之和 = 顶层 duration，最大 15s（kling-v3-omni 支持）
+    - image_list 使用公开 URL（先压缩图片再上传，避免 base64 过大导致超时）
+    - 无需 negative_prompt / cfg_scale / resolution（Omni 接口不支持这些字段）
+    - 不降级！Omni 失败直接抛异常
     """
+    import subprocess
+    import tempfile
+    from PIL import Image as PILImage
+
     api_key = config.video_gen.kling.api_key
     api_secret = config.video_gen.kling.api_secret
 
@@ -238,105 +248,87 @@ async def _submit_kling_omni(
 
     token = _generate_kling_jwt(api_key, api_secret)
 
-    # 全局参考图列表（所有分镜共享的 image_list）
-    # Omni3 支持在顶层传入 image_list，所有分镜的 <<<image_N>>> 都引用这个列表
-    global_image_list = []
-    global_image_paths = []  # 用于追踪已加入的路径，避免重复
+    # 收集所有分镜的关键帧图片，压缩后上传到公开 URL
+    # 避免 base64 过大（单张图 1.5MB 的 base64 就有 2MB，5张共 10MB，导致超时）
+    image_list = []
+    image_path_to_idx = {}  # path -> 1-based index
 
-    # 收集所有分镜的参考图（去重）
-    all_ref_paths = []
-    if reference_images:
-        all_ref_paths.extend([p for p in reference_images[:3] if os.path.exists(p)])
     for scene in scenes:
-        if scene.character_refs:
-            for p in scene.character_refs:
-                if p and os.path.exists(p) and p not in all_ref_paths:
-                    all_ref_paths.append(p)
-        elif scene.reference_character and os.path.exists(scene.reference_character):
-            if scene.reference_character not in all_ref_paths:
-                all_ref_paths.append(scene.reference_character)
+        kf_path = image_paths.get(scene.scene_id)
+        if kf_path and os.path.exists(kf_path) and kf_path not in image_path_to_idx:
+            idx = len(image_list) + 1
+            image_path_to_idx[kf_path] = idx
 
-    for ref_path in all_ref_paths[:4]:  # Omni 最多4张参考图
-        global_image_list.append(_image_to_base64(ref_path))
-        global_image_paths.append(ref_path)
-
-    # 构建 multi_prompt 列表
-    multi_prompt = []
-    for scene in scenes:
-        shot_mode = auto_detect_shot_mode(scene)
-        duration = 5 if scene.duration <= 7 else 10
-
-        # 构建导演式提示词（含 <<<image_N>>> 引用）
-        if global_image_list and shot_mode == "multi_ref":
-            # 确定该分镜使用哪些参考图
-            char_refs = []
-            if scene.character_refs:
-                for p in scene.character_refs[:2]:
-                    if p in global_image_paths:
-                        idx = global_image_paths.index(p) + 1
-                        char_refs.append(f"<<<image_{idx}>>>")
-            elif scene.reference_character and scene.reference_character in global_image_paths:
-                idx = global_image_paths.index(scene.reference_character) + 1
-                char_refs.append(f"<<<image_{idx}>>>")
-            elif global_image_paths:
-                # 默认使用第一张参考图
-                char_refs.append("<<<image_1>>>")
-
-            if char_refs:
-                char_ref_str = " and ".join(char_refs)
-                prompt = (
-                    f"{scene.video_prompt}. "
-                    f"Main character: {char_ref_str}. "
-                    f"Maintain character consistency throughout."
+            # 压缩图片到 1280x720，保存为 JPEG
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                tmp_path = tmp.name
+            try:
+                img = PILImage.open(kf_path)
+                img.thumbnail((1280, 720), PILImage.LANCZOS)
+                img.save(tmp_path, "JPEG", quality=85)
+                # 上传到公开 CDN
+                result_bytes = subprocess.check_output(
+                    ["manus-upload-file", tmp_path],
+                    stderr=subprocess.DEVNULL
                 )
-            else:
-                prompt = scene.video_prompt
+                result_text = result_bytes.decode()
+                # 解析 CDN URL
+                cdn_url = None
+                for line in result_text.splitlines():
+                    if "CDN URL:" in line:
+                        cdn_url = line.split("CDN URL:")[-1].strip()
+                        break
+                if not cdn_url:
+                    raise RuntimeError(f"图片上传失败，无法获取 CDN URL: {result_text[:200]}")
+                image_list.append({"image_url": cdn_url})
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+    # 构建 multi_prompt 列表（每个分镜一条）
+    # Kling Omni 规则（基于官方文档）：
+    # - kling-v3-omni 支持最长 15s（相比 o1 的 10s 延长）
+    # - 顶层 duration = 所有分镜时长之和，取值范围 3~15（字符串）
+    # - multi_prompt 中每个分镜必须传 duration（字符串）
+    # - 最多支持 6 个分镜
+    num_scenes = len(scenes)
+    # 每个分镜固定 3s，5个分镜总时长 15s（kling-v3-omni 支持最长 15s）
+    scene_dur = 3
+    total_duration = num_scenes * scene_dur
+    # 限制在 3~15s 范围内
+    total_duration = max(3, min(15, total_duration))
+    total_duration_str = str(total_duration)
+
+    multi_prompt = []
+    for i, scene in enumerate(scenes):
+        # 构建提示词：如果有对应关键帧，用 <<<image_N>>> 引用
+        kf_path = image_paths.get(scene.scene_id)
+        if kf_path and kf_path in image_path_to_idx:
+            img_ref = f"<<<image_{image_path_to_idx[kf_path]}>>>"
+            prompt = f"{img_ref} {scene.video_prompt}"
         else:
             prompt = scene.video_prompt
 
-        shot_data = {
+        # 截断提示词到 512 字符（官方限制）
+        prompt = prompt[:512]
+
+        multi_prompt.append({
+            "index": i + 1,
             "prompt": prompt,
-            "duration": duration,
-            "shot_mode": shot_mode,
-        }
-
-        # 根据 shot_mode 添加对应参数
-        if shot_mode == "first_end_frame":
-            # 首尾帧：用关键帧作为首帧
-            # 核心逻辑：强制指定第1帧和最后一帧，AI 负责生成中间补帧动画
-            kf_path = image_paths.get(scene.scene_id)
-            if kf_path and os.path.exists(kf_path):
-                shot_data["first_frame_image"] = _image_to_base64(kf_path)
-
-        elif shot_mode in ("i2v", "multi_ref"):
-            # 图生视频 / 多参考：用关键帧作为首帧
-            kf_path = image_paths.get(scene.scene_id)
-            if kf_path and os.path.exists(kf_path):
-                shot_data["first_frame_image"] = _image_to_base64(kf_path)
-
-        # t2v 模式：不传图片，纯文生视频
-
-        multi_prompt.append(shot_data)
-
-    # 确定分辨率
-    quality = config.video_gen.kling.default_quality or "high"
-    resolution = "1080p" if quality == "high" else "720p"
+            "duration": str(scene_dur),  # 必须传，字符串格式
+        })
 
     payload = {
-        "model_name": "kling-video-o1",  # Omni 专用模型
+        "model_name": "kling-v3-omni",   # 多镜头专用模型，支持最长 15s
         "multi_shot": True,
-        "shot_type": "intelligence",     # Omni3 智能分镜模式
+        "shot_type": "customize",          # customize = 自定义分镜（需传 multi_prompt）
+        "prompt": "",                      # multi_shot=true 时顶层 prompt 无效
         "multi_prompt": multi_prompt,
-        "negative_prompt": "blurry, low quality, distorted, deformed, ugly, bad anatomy",
-        "cfg_scale": 0.5,
-        "mode": "std",
+        "image_list": image_list,          # 关键帧图片列表（base64）
+        "mode": "pro",
         "aspect_ratio": config.video_gen.kling.default_ratio or "16:9",
-        "resolution": resolution,
+        "duration": total_duration_str,    # 各分镜时长之和，3~15s
     }
-
-    # 如果有全局参考图，加入顶层 image_list
-    if global_image_list:
-        payload["image_list"] = global_image_list
 
     url = f"{config.video_gen.kling.base_url}/v1/videos/omni-video"
     headers = {
@@ -353,7 +345,7 @@ async def _submit_kling_omni(
 
     if result.get("code") != 0:
         raise RuntimeError(
-            f"Kling Omni 任务提交失败 (code={result.get('code')}, msg={result.get('message')}): {result}"
+            f"Kling Omni 任务提交失败 (code={result.get('code')}, msg={result.get('message')}): {resp_text[:500]}"
         )
 
     return result["data"]["task_id"]
@@ -363,8 +355,8 @@ async def _poll_kling_omni_task(
     task_id: str,
     config: PilipiliConfig,
     session: aiohttp.ClientSession,
-    timeout: int = 600,
-    poll_interval: int = 5,
+    timeout: int = 900,
+    poll_interval: int = 10,
 ) -> list[str]:
     """
     轮询 Kling Omni 任务状态，返回视频 URL 列表（多镜头）
@@ -405,6 +397,8 @@ async def _poll_kling_omni_task(
         elif status == "failed":
             raise RuntimeError(f"Kling Omni 任务失败: {result['data'].get('task_status_msg', '未知错误')}")
 
+        elapsed = int(time.time() - start_time)
+        print(f"[VideoGen] Omni 任务 {task_id} 状态: {status} ({elapsed}s/{timeout}s)")
         await asyncio.sleep(poll_interval)
 
     raise TimeoutError(f"Kling Omni 任务 {task_id} 超时（{timeout}s）")
@@ -443,7 +437,6 @@ async def _submit_kling_i2v(
         "mode": "std",
         "duration": str(duration),
         "aspect_ratio": config.video_gen.kling.default_ratio or "16:9",
-        "resolution": resolution,
     }
 
     url = f"{config.video_gen.kling.base_url}/v1/videos/image2video"
@@ -469,8 +462,8 @@ async def _poll_kling_task(
     task_id: str,
     config: PilipiliConfig,
     session: aiohttp.ClientSession,
-    timeout: int = 300,
-    poll_interval: int = 5,
+    timeout: int = 600,
+    poll_interval: int = 10,
 ) -> str:
     """轮询 Kling v3 任务状态，返回视频 URL"""
     api_key = config.video_gen.kling.api_key
@@ -504,6 +497,8 @@ async def _poll_kling_task(
         elif status == "failed":
             raise RuntimeError(f"Kling 任务失败: {result['data'].get('task_status_msg', '未知错误')}")
 
+        elapsed = int(time.time() - start_time)
+        print(f"[VideoGen] v3 任务 {task_id} 状态: {status} ({elapsed}s/{timeout}s)")
         await asyncio.sleep(poll_interval)
 
     raise TimeoutError(f"Kling 任务 {task_id} 超时（{timeout}s）")
@@ -681,13 +676,8 @@ async def generate_video_clip(
                 if not video_url:
                     raise RuntimeError("Kling Omni 返回空视频 URL")
             except Exception as omni_err:
-                if verbose:
-                    print(f"[VideoGen] Kling Omni 失败 ({omni_err})，回退到 v3 i2v 接口")
-                # 回退到旧版 i2v
-                task_id = await _submit_kling_i2v(image_path, scene, config, session)
-                if verbose:
-                    print(f"[VideoGen] Kling v3 任务已提交: {task_id}")
-                video_url = await _poll_kling_task(task_id, config, session)
+                # 不降级！直接抛出异常，确保全程使用 kling-v3-omni
+                raise RuntimeError(f"[VideoGen] Kling Omni 失败，不降级处理: {omni_err}") from omni_err
 
         elif selected_engine == "seedance":
             task_id = await _submit_seedance_i2v(image_path, scene, config, session)
@@ -800,30 +790,8 @@ async def generate_video_clips_omni_batch(
                         print(f"[VideoGen] Scene {scene.scene_id} 视频已保存: {output_path}")
 
             except Exception as e:
-                if verbose:
-                    print(f"[VideoGen] Omni 批次失败 ({e})，逐个回退到 v3 i2v 接口")
-
-                # 批次失败时逐个回退
-                for scene in batch:
-                    try:
-                        kf_path = keyframe_paths.get(scene.scene_id)
-                        if not kf_path or not os.path.exists(kf_path):
-                            continue
-
-                        task_id = await _submit_kling_i2v(kf_path, scene, config, session)
-                        video_url = await _poll_kling_task(task_id, config, session)
-
-                        output_path = os.path.join(output_dir, f"scene_{scene.scene_id:03d}_clip.mp4")
-                        async with session.get(video_url) as resp:
-                            video_data = await resp.read()
-                        with open(output_path, "wb") as f:
-                            f.write(video_data)
-
-                        results[scene.scene_id] = output_path
-
-                    except Exception as scene_err:
-                        if verbose:
-                            print(f"[VideoGen] Scene {scene.scene_id} 生成失败: {scene_err}")
+                # 不降级！直接抛出异常，确保全程使用 kling-v3-omni
+                raise RuntimeError(f"[VideoGen] Kling Omni 批次失败，不降级处理: {e}") from e
 
     return results
 
