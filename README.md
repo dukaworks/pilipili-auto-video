@@ -1,4 +1,4 @@
-# 🎬 Pilipili-AutoVideo · 噼哩噼哩
+# 🎬 芝麻开门 · Open-Door
 
 ### Fully Automated AI Video Agent · Local Deployment · One Sentence to Final Cut
 
@@ -19,7 +19,7 @@
 
 ## 📖 Overview
 
-**Pilipili-AutoVideo (噼哩噼哩)** is a fully local, end-to-end AI video agent. Describe your video in one sentence — the system automatically handles script planning → keyframe image generation → TTS voiceover → video clip generation → FFmpeg assembly → subtitle burning, delivering a complete MP4 with subtitles and a CapCut/JianYing draft project for final human touch-ups.
+**Open-Door (芝麻开门)** is a fully local, end-to-end AI video agent. Describe your video in one sentence — the system automatically handles script planning → keyframe image generation → TTS voiceover → video clip generation → FFmpeg assembly → subtitle burning, delivering a complete MP4 with subtitles and a CapCut/JianYing draft project for final human touch-ups.
 
 Key differentiators from similar tools (LibTV, Huobao Drama):
 
@@ -45,7 +45,7 @@ Key differentiators from similar tools (LibTV, Huobao Drama):
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                  Pilipili-AutoVideo Architecture             │
+│                  Open-Door Architecture                  │
 ├─────────────────────────────────────────────────────────────┤
 │  Frontend    React 19 + TailwindCSS · 3-panel Studio · WS   │
 ├─────────────────────────────────────────────────────────────┤
@@ -111,8 +111,8 @@ ffmpeg -version
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/OpenDemon/Pilipili-AutoVideo.git
-cd Pilipili-AutoVideo
+git clone https://github.com/OpenDemon/ZhiMa-KaiMen.git
+cd ZhiMa-KaiMen
 
 # 2. Install Python dependencies
 pip install -r requirements.txt
@@ -205,7 +205,7 @@ docker-compose up -d
 ## 📦 Project Structure
 
 ```
-Pilipili-AutoVideo/
+ZhiMa-KaiMen/
 ├── api/
 │   └── server.py           # FastAPI backend + WebSocket
 ├── cli/
@@ -284,7 +284,7 @@ User Input
 
 ## 🆚 Comparison
 
-| Dimension | LibTV | Huobao Drama | **Pilipili** |
+| Dimension | LibTV | Huobao Drama | **Open-Door** |
 | :--- | :---: | :---: | :---: |
 | Interaction | Node canvas, manual trigger | Form-based, step-by-step | **Natural language, one sentence** |
 | Audio-Video Sync | Manual editing | Not explicitly supported | **Measure TTS duration → control video duration** |
@@ -315,7 +315,7 @@ Current test coverage: **18 unit tests, all passing**.
 
 ## 🔌 Skill Integration
 
-Pilipili-AutoVideo is packaged as a standard Skill, callable by any AI Agent:
+Open-Door is packaged as a standard Skill, callable by any AI Agent:
 
 ```markdown
 # In an Agent session
@@ -323,7 +323,7 @@ Please generate a 60-second science explainer video about "The History of AI Chi
 blue-purple tech aesthetic.
 ```
 
-The Agent will automatically read `skills/SKILL.md` and invoke Pilipili to complete the entire workflow.
+The Agent will automatically read `skills/SKILL.md` and invoke Open-Door to complete the entire workflow.
 
 ---
 
@@ -365,6 +365,6 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  <b>Pilipili-AutoVideo · 噼哩噼哩</b> · Local Deployment · Fully Automated AI Video Agent<br/>
+  <b>芝麻开门 · Open-Door</b> · Local Deployment · Fully Automated AI Video Agent<br/>
   If this project helps you, please give it a ⭐ Star!
 </p>

@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 图像生成模块 - Nano Banana (Gemini Image Generation)
 
 职责：
@@ -22,8 +22,10 @@ from pathlib import Path
 from typing import Optional
 from google import genai
 from google.genai import types
+
 try:
     from PIL import Image, ImageDraw
+
     _PIL_AVAILABLE = True
 except ImportError:
     _PIL_AVAILABLE = False
@@ -43,7 +45,9 @@ def _mark_model_failed(model_name: str, reason: str, verbose: bool = False) -> N
     if model_name not in _FAILED_MODELS:
         _FAILED_MODELS.add(model_name)
         if verbose:
-            print(f"[ImageGen] ⚠️  模型 {model_name} 已加入黑名单（{reason}），本次任务后续分镜将跳过此模型")
+            print(
+                f"[ImageGen] ⚠️  模型 {model_name} 已加入黑名单（{reason}），本次任务后续分镜将跳过此模型"
+            )
 
 
 def reset_failed_models() -> None:
@@ -54,6 +58,7 @@ def reset_failed_models() -> None:
 # ============================================================
 # 图像生成核心函数
 # ============================================================
+
 
 async def generate_keyframe(
     scene: Scene,
@@ -93,7 +98,9 @@ async def generate_keyframe(
 
     api_key = config.image_gen.api_key
     if not api_key:
-        raise ValueError("Nano Banana (Gemini) API Key 未配置，请在 config.yaml 中设置 image_gen.api_key")
+        raise ValueError(
+            "Nano Banana (Gemini) API Key 未配置，请在 config.yaml 中设置 image_gen.api_key"
+        )
 
     client = genai.Client(api_key=api_key)
 
@@ -125,24 +132,24 @@ async def generate_keyframe(
                 with open(ref_path, "rb") as f:
                     img_data = f.read()
                 mime_type = _detect_mime_type(ref_path)
-                ref_parts.append(
-                    types.Part.from_bytes(data=img_data, mime_type=mime_type)
-                )
+                ref_parts.append(types.Part.from_bytes(data=img_data, mime_type=mime_type))
         if ref_parts:
             contents.extend(ref_parts)
-            contents.append(types.Part.from_text(
-                text=(
-                    "CRITICAL CHARACTER CONSISTENCY INSTRUCTION: "
-                    "The reference image(s) above show the EXACT character(s) that MUST appear in the generated image. "
-                    "You MUST preserve: 1) The EXACT same face, facial features, and facial structure. "
-                    "2) The EXACT same hairstyle, hair color, and hair length. "
-                    "3) The EXACT same clothing, accessories, glasses, hats, and other distinctive items. "
-                    "4) The EXACT same body type and proportions. "
-                    "5) The EXACT same skin tone and complexion. "
-                    "The character should look like the SAME PERSON in a different scene/pose, NOT a different person. "
-                    "This is the highest priority requirement — character identity must be preserved above all else."
+            contents.append(
+                types.Part.from_text(
+                    text=(
+                        "CRITICAL CHARACTER CONSISTENCY INSTRUCTION: "
+                        "The reference image(s) above show the EXACT character(s) that MUST appear in the generated image. "
+                        "You MUST preserve: 1) The EXACT same face, facial features, and facial structure. "
+                        "2) The EXACT same hairstyle, hair color, and hair length. "
+                        "3) The EXACT same clothing, accessories, glasses, hats, and other distinctive items. "
+                        "4) The EXACT same body type and proportions. "
+                        "5) The EXACT same skin tone and complexion. "
+                        "The character should look like the SAME PERSON in a different scene/pose, NOT a different person. "
+                        "This is the highest priority requirement — character identity must be preserved above all else."
+                    )
                 )
-            ))
+            )
 
     # 添加风格参考图
     if style_reference and os.path.exists(style_reference):
@@ -150,9 +157,11 @@ async def generate_keyframe(
             style_data = f.read()
         mime_type = _detect_mime_type(style_reference)
         contents.append(types.Part.from_bytes(data=style_data, mime_type=mime_type))
-        contents.append(types.Part.from_text(
-            text="Please use the visual style, color palette and aesthetic shown in the style reference image above."
-        ))
+        contents.append(
+            types.Part.from_text(
+                text="Please use the visual style, color palette and aesthetic shown in the style reference image above."
+            )
+        )
 
     # 添加主提示词
     contents.append(types.Part.from_text(text=full_prompt))
@@ -162,9 +171,9 @@ async def generate_keyframe(
     # 会话级黑名单：已失败的模型直接跳过，不再重试
     # -------------------------------------------------------
     FALLBACK_MODELS = [
-        config.image_gen.model,                        # config 配置的主模型
-        "models/gemini-2.5-flash-image",               # 备选：2.5 Flash 图像版（经 ListModels 确认存在）
-        "models/gemini-3.1-flash-image-preview",       # 备选：3.1 Flash 图像预览（经 ListModels 确认存在）
+        config.image_gen.model,  # config 配置的主模型
+        "models/gemini-2.5-flash-image",  # 备选：2.5 Flash 图像版（经 ListModels 确认存在）
+        "models/gemini-3.1-flash-image-preview",  # 备选：3.1 Flash 图像预览（经 ListModels 确认存在）
     ]
     # 去重保序
     seen: set[str] = set()
@@ -202,7 +211,7 @@ async def generate_keyframe(
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["IMAGE", "TEXT"],
-                )
+                ),
             )
             try:
                 response = future.result(timeout=IMAGE_GEN_TIMEOUT)
@@ -248,6 +257,7 @@ async def generate_keyframe(
                     if verbose:
                         print(f"[ImageGen] ⚠️  模型 {model_name} 触发 RPM 限速，等待 30s 后重试...")
                     import time
+
                     time.sleep(30)
                     # 重试当前模型（通过 continue 跳过，但不加黑名单，下次循环会再试）
                     # 注意：for 循环不会重试同一个 model_name，所以这里直接 continue 到下一个
@@ -283,17 +293,19 @@ async def generate_keyframe(
         finish_reason = None
         text_response = ""
         if candidates and candidates[0]:
-            finish_reason = getattr(candidates[0], 'finish_reason', None)
+            finish_reason = getattr(candidates[0], "finish_reason", None)
             try:
                 content = candidates[0].content
                 if content and content.parts:
                     for part in content.parts:
-                        if hasattr(part, 'text') and part.text:
+                        if hasattr(part, "text") and part.text:
                             text_response += part.text
             except Exception:
                 pass
         if verbose and text_response:
-            print(f"[ImageGen] Scene {scene.scene_id} API 返回文本（未生成图片）: {text_response[:300]}")
+            print(
+                f"[ImageGen] Scene {scene.scene_id} API 返回文本（未生成图片）: {text_response[:300]}"
+            )
 
         # IMAGE_SAFETY 拦截：先用简化 prompt 重试一次
         finish_reason_str = str(finish_reason)
@@ -380,7 +392,7 @@ async def generate_all_keyframes(
     char_map: dict[int, object] = {}
     if characters:
         for char in characters:
-            cid = char.character_id if hasattr(char, 'character_id') else char.get('character_id')
+            cid = char.character_id if hasattr(char, "character_id") else char.get("character_id")
             if cid is not None:
                 char_map[cid] = char
 
@@ -403,11 +415,16 @@ async def generate_all_keyframes(
                 for cid in scene.characters_in_scene:
                     char = char_map.get(cid)
                     if char:
-                        ap = char.appearance_prompt if hasattr(char, 'appearance_prompt') else char.get('appearance_prompt', '')
+                        ap = (
+                            char.appearance_prompt
+                            if hasattr(char, "appearance_prompt")
+                            else char.get("appearance_prompt", "")
+                        )
                         if ap:
                             appearance_parts.append(ap)
                 if appearance_parts:
                     from dataclasses import replace as dc_replace
+
                     extra = "; ".join(appearance_parts)
                     new_prompt = f"{scene.image_prompt}. CHARACTER APPEARANCE (maintain consistency): {extra}"
                     enhanced_scene = dc_replace(scene, image_prompt=new_prompt)
@@ -439,21 +456,24 @@ def generate_all_keyframes_sync(
     characters: Optional[list] = None,
 ) -> dict[int, str]:
     """generate_all_keyframes 的同步版本"""
-    return asyncio.run(generate_all_keyframes(
-        scenes=scenes,
-        output_dir=output_dir,
-        reference_images=reference_images,
-        style_reference=style_reference,
-        config=config,
-        max_concurrent=max_concurrent,
-        verbose=verbose,
-        characters=characters,
-    ))
+    return asyncio.run(
+        generate_all_keyframes(
+            scenes=scenes,
+            output_dir=output_dir,
+            reference_images=reference_images,
+            style_reference=style_reference,
+            config=config,
+            max_concurrent=max_concurrent,
+            verbose=verbose,
+            characters=characters,
+        )
+    )
 
 
 # ============================================================
 # 工具函数
 # ============================================================
+
 
 def _detect_mime_type(path: str) -> str:
     """根据文件扩展名检测 MIME 类型"""
@@ -475,9 +495,26 @@ def _make_safe_prompt(scene: Scene) -> str:
     """
     # 提取场景关键词（去掉人物相关词汇）
     unsafe_keywords = [
-        "touch", "kiss", "hug", "embrace", "hold", "hand", "body",
-        "intimate", "close", "near", "together", "couple",
-        "触碰", "接触", "拥抱", "亲吻", "靠近", "依偎", "手", "身体",
+        "touch",
+        "kiss",
+        "hug",
+        "embrace",
+        "hold",
+        "hand",
+        "body",
+        "intimate",
+        "close",
+        "near",
+        "together",
+        "couple",
+        "触碰",
+        "接触",
+        "拥抱",
+        "亲吻",
+        "靠近",
+        "依偎",
+        "手",
+        "身体",
     ]
     prompt = scene.image_prompt
     for kw in unsafe_keywords:
@@ -518,9 +555,11 @@ def _create_placeholder_image(output_path: str, scene_id: int, verbose: bool = F
     else:
         # PIL 不可用时写一个最小合法 PNG（1x1 黑色像素）
         import struct, zlib
+
         def _png_chunk(tag, data):
             c = zlib.crc32(tag + data) & 0xFFFFFFFF
             return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", c)
+
         png = (
             b"\x89PNG\r\n\x1a\n"
             + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))

@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 集成测试套件
 
 测试策略：
@@ -21,6 +21,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.config import PilipiliConfig, get_config, reset_config
@@ -32,6 +33,7 @@ from modules.assembler import _format_srt_time, _split_subtitle_text, _map_trans
 # ============================================================
 # Fixtures
 # ============================================================
+
 
 @pytest.fixture
 def sample_scene():
@@ -69,7 +71,7 @@ def sample_script(sample_scene):
         metadata={
             "description": "探索人工智能如何改变我们的未来",
             "tags": ["AI", "科技", "未来"],
-        }
+        },
     )
 
 
@@ -82,6 +84,7 @@ def config():
 # ============================================================
 # 单元测试：数据结构
 # ============================================================
+
 
 class TestDataStructures:
     def test_scene_creation(self, sample_scene):
@@ -126,6 +129,7 @@ class TestDataStructures:
 # 单元测试：TTS 工具函数
 # ============================================================
 
+
 class TestTTSUtils:
     def test_update_scene_durations(self, sample_script):
         """测试根据 TTS 时长更新分镜时长"""
@@ -149,6 +153,7 @@ class TestTTSUtils:
 # ============================================================
 # 单元测试：字幕工具函数
 # ============================================================
+
 
 class TestSubtitleUtils:
     def test_format_srt_time(self):
@@ -183,6 +188,7 @@ class TestSubtitleUtils:
 # 单元测试：配置系统
 # ============================================================
 
+
 class TestConfig:
     def test_default_config(self):
         """测试默认配置"""
@@ -199,6 +205,7 @@ class TestConfig:
 
         reset_config()
         from core.config import load_config
+
         config = load_config()
 
         assert config.llm.deepseek.api_key == "test-key-123"
@@ -208,6 +215,7 @@ class TestConfig:
 # ============================================================
 # 单元测试：记忆系统
 # ============================================================
+
 
 class TestMemorySystem:
     def test_local_memory_store(self, tmp_path):
@@ -234,7 +242,9 @@ class TestMemorySystem:
 
         # 保存程序性记忆
         store.save_procedural_memory("user1", "科技", "image_prompt", "neon city at night")
-        store.save_procedural_memory("user1", "科技", "image_prompt", "neon city at night")  # 重复，计数+1
+        store.save_procedural_memory(
+            "user1", "科技", "image_prompt", "neon city at night"
+        )  # 重复，计数+1
 
         memories = store.get_procedural_memories("user1", "科技", "image_prompt")
         assert len(memories) == 1
@@ -263,6 +273,7 @@ class TestMemorySystem:
 # 集成测试：LLM（需要 API Key）
 # ============================================================
 
+
 @pytest.mark.api
 class TestLLMIntegration:
     @pytest.mark.asyncio
@@ -284,7 +295,7 @@ class TestLLMIntegration:
                     "style_tags": ["futuristic", "technology"],
                 }
             ],
-            "metadata": {"description": "AI 的未来", "tags": ["AI"]}
+            "metadata": {"description": "AI 的未来", "tags": ["AI"]},
         }
 
         mock_completion = MagicMock()
@@ -296,6 +307,7 @@ class TestLLMIntegration:
             mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
             from modules.llm import generate_script
+
             config = PilipiliConfig()
             config.llm.deepseek.api_key = "test-key"
 
@@ -311,6 +323,7 @@ class TestLLMIntegration:
 # ============================================================
 # 集成测试：视频引擎路由
 # ============================================================
+
 
 class TestVideoEngineRouting:
     def test_route_to_seedance_for_dialogue(self, sample_scene):
@@ -355,6 +368,7 @@ class TestVideoEngineRouting:
 # 集成测试：剪映草稿生成
 # ============================================================
 
+
 class TestJianyingDraft:
     def test_edl_fallback(self, sample_script, tmp_path):
         """测试 EDL 回退方案"""
@@ -365,8 +379,7 @@ class TestJianyingDraft:
 
         output_dir = str(tmp_path / "draft")
         result = _generate_edl_fallback(
-            sample_script, video_clips, audio_clips,
-            output_dir, "测试项目", verbose=False
+            sample_script, video_clips, audio_clips, output_dir, "测试项目", verbose=False
         )
 
         assert os.path.exists(output_dir)
@@ -386,6 +399,7 @@ class TestJianyingDraft:
 # ============================================================
 # 端到端测试（需要所有 API Keys）
 # ============================================================
+
 
 @pytest.mark.api
 @pytest.mark.e2e

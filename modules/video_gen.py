@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 视频生成模块 - Kling Omni / Kling v3 / Seedance 1.5
 
 v2.0 改动：
@@ -52,7 +52,9 @@ def auto_detect_shot_mode(scene: Scene) -> ShotMode:
     if hasattr(scene, "shot_mode") and scene.shot_mode:
         return scene.shot_mode
 
-    prompt_lower = (scene.video_prompt + " " + scene.image_prompt + " " + " ".join(scene.style_tags)).lower()
+    prompt_lower = (
+        scene.video_prompt + " " + scene.image_prompt + " " + " ".join(scene.style_tags)
+    ).lower()
 
     # 有角色参考图 → 优先使用 multi_ref
     if scene.reference_character:
@@ -60,23 +62,64 @@ def auto_detect_shot_mode(scene: Scene) -> ShotMode:
 
     # 转场/运镜/过渡关键词 → first_end_frame
     transition_keywords = [
-        "transition", "morph", "transform", "cut to", "fade to",
-        "time lapse", "timelapse", "time-lapse", "dissolve",
-        "转场", "过渡", "变换", "延时", "时光流逝"
+        "transition",
+        "morph",
+        "transform",
+        "cut to",
+        "fade to",
+        "time lapse",
+        "timelapse",
+        "time-lapse",
+        "dissolve",
+        "转场",
+        "过渡",
+        "变换",
+        "延时",
+        "时光流逝",
     ]
     if any(kw in prompt_lower for kw in transition_keywords):
         return "first_end_frame"
 
     # 纯风景/氛围/无人物 → t2v
     landscape_keywords = [
-        "landscape", "scenery", "nature", "sky", "ocean", "mountain",
-        "forest", "sunset", "sunrise", "clouds", "aerial", "drone",
-        "风景", "自然", "天空", "海洋", "山脉", "森林", "日落", "日出",
-        "云彩", "航拍", "无人机", "空镜"
+        "landscape",
+        "scenery",
+        "nature",
+        "sky",
+        "ocean",
+        "mountain",
+        "forest",
+        "sunset",
+        "sunrise",
+        "clouds",
+        "aerial",
+        "drone",
+        "风景",
+        "自然",
+        "天空",
+        "海洋",
+        "山脉",
+        "森林",
+        "日落",
+        "日出",
+        "云彩",
+        "航拍",
+        "无人机",
+        "空镜",
     ]
     person_keywords = [
-        "person", "people", "man", "woman", "character", "figure",
-        "人物", "人", "男", "女", "角色", "主角"
+        "person",
+        "people",
+        "man",
+        "woman",
+        "character",
+        "figure",
+        "人物",
+        "人",
+        "男",
+        "女",
+        "角色",
+        "主角",
     ]
     has_landscape = any(kw in prompt_lower for kw in landscape_keywords)
     has_person = any(kw in prompt_lower for kw in person_keywords)
@@ -92,6 +135,7 @@ def auto_detect_shot_mode(scene: Scene) -> ShotMode:
 # 视频引擎路由逻辑
 # ============================================================
 
+
 def smart_route_engine(scene: Scene, default: str = "kling") -> str:
     """
     根据场景内容智能选择视频引擎
@@ -103,15 +147,42 @@ def smart_route_engine(scene: Scene, default: str = "kling") -> str:
     - 其他 → 使用默认引擎
     """
     seedance_keywords = [
-        "talking", "speaking", "dialogue", "conversation", "lip sync",
-        "multiple characters", "crowd", "group", "people talking",
-        "interview", "narration", "说话", "对话", "多人", "人群"
+        "talking",
+        "speaking",
+        "dialogue",
+        "conversation",
+        "lip sync",
+        "multiple characters",
+        "crowd",
+        "group",
+        "people talking",
+        "interview",
+        "narration",
+        "说话",
+        "对话",
+        "多人",
+        "人群",
     ]
 
     kling_keywords = [
-        "action", "running", "jumping", "sports", "explosion", "fast",
-        "dynamic", "energetic", "chase", "fight", "dance",
-        "动作", "奔跑", "跳跃", "运动", "爆炸", "快速", "舞蹈"
+        "action",
+        "running",
+        "jumping",
+        "sports",
+        "explosion",
+        "fast",
+        "dynamic",
+        "energetic",
+        "chase",
+        "fight",
+        "dance",
+        "动作",
+        "奔跑",
+        "跳跃",
+        "运动",
+        "爆炸",
+        "快速",
+        "舞蹈",
     ]
 
     prompt_lower = (scene.video_prompt + " " + " ".join(scene.style_tags)).lower()
@@ -130,6 +201,7 @@ def smart_route_engine(scene: Scene, default: str = "kling") -> str:
 # ============================================================
 # Kling JWT 认证
 # ============================================================
+
 
 def _generate_kling_jwt(api_key: str, api_secret: str) -> str:
     """生成 Kling API JWT Token（遵循官方文档，显式传 headers）"""
@@ -154,6 +226,7 @@ def _image_to_base64(image_path: str) -> str:
 # ============================================================
 # Kling Omni API（v2.0 新增）
 # ============================================================
+
 
 def _build_omni_prompt(
     scene: Scene,
@@ -232,9 +305,7 @@ async def _upload_image_to_cdn(
 
     try:
         async with session.post(
-            "https://catbox.moe/user/api.php",
-            data=form,
-            timeout=aiohttp.ClientTimeout(total=30)
+            "https://catbox.moe/user/api.php", data=form, timeout=aiohttp.ClientTimeout(total=30)
         ) as resp:
             cdn_url = (await resp.text()).strip()
         if not cdn_url.startswith("http"):
@@ -304,7 +375,7 @@ async def _submit_kling_omni(
     total_duration_str = str(total_duration)
 
     # 将 total_duration 均分给 num_scenes 个分镜
-    base_dur = total_duration // num_scenes          # 每个分镜的基础时长（整数）
+    base_dur = total_duration // num_scenes  # 每个分镜的基础时长（整数）
     remainder = total_duration - base_dur * num_scenes  # 余数加到最后一个分镜
     scene_durs = [base_dur] * num_scenes
     scene_durs[-1] += remainder  # 最后一个分镜承接余数，保证总和严格相等
@@ -322,22 +393,24 @@ async def _submit_kling_omni(
         # 截断提示词到 512 字符（官方限制）
         prompt = prompt[:512]
 
-        multi_prompt.append({
-            "index": i + 1,
-            "prompt": prompt,
-            "duration": str(scene_durs[i]),  # 必须传，字符串格式，且总和 == total_duration
-        })
+        multi_prompt.append(
+            {
+                "index": i + 1,
+                "prompt": prompt,
+                "duration": str(scene_durs[i]),  # 必须传，字符串格式，且总和 == total_duration
+            }
+        )
 
     payload = {
-        "model_name": "kling-v3-omni",   # 多镜头专用模型，支持最长 15s
+        "model_name": "kling-v3-omni",  # 多镜头专用模型，支持最长 15s
         "multi_shot": True,
-        "shot_type": "customize",          # customize = 自定义分镜（需传 multi_prompt）
-        "prompt": "",                      # multi_shot=true 时顶层 prompt 无效
+        "shot_type": "customize",  # customize = 自定义分镜（需传 multi_prompt）
+        "prompt": "",  # multi_shot=true 时顶层 prompt 无效
         "multi_prompt": multi_prompt,
-        "image_list": image_list,          # 关键帧图片列表（公开 URL）
+        "image_list": image_list,  # 关键帧图片列表（公开 URL）
         "mode": "pro",
         "aspect_ratio": config.video_gen.kling.default_ratio or "16:9",
-        "duration": total_duration_str,    # 各分镜时长之和，3~15s
+        "duration": total_duration_str,  # 各分镜时长之和，3~15s
     }
 
     url = f"{config.video_gen.kling.base_url}/v1/videos/omni-video"
@@ -351,7 +424,9 @@ async def _submit_kling_omni(
         try:
             result = json.loads(resp_text)
         except json.JSONDecodeError:
-            raise RuntimeError(f"Kling Omni API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
+            raise RuntimeError(
+                f"Kling Omni API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}"
+            )
 
     if result.get("code") != 0:
         raise RuntimeError(
@@ -389,7 +464,9 @@ async def _poll_kling_omni_task(
             try:
                 result = json.loads(resp_text)
             except json.JSONDecodeError:
-                raise RuntimeError(f"Kling Omni 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
+                raise RuntimeError(
+                    f"Kling Omni 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}"
+                )
 
         if result.get("code") != 0:
             raise RuntimeError(
@@ -405,7 +482,9 @@ async def _poll_kling_omni_task(
             raise RuntimeError("Kling Omni 任务成功但无视频 URL")
 
         elif status == "failed":
-            raise RuntimeError(f"Kling Omni 任务失败: {result['data'].get('task_status_msg', '未知错误')}")
+            raise RuntimeError(
+                f"Kling Omni 任务失败: {result['data'].get('task_status_msg', '未知错误')}"
+            )
 
         elapsed = int(time.time() - start_time)
         print(f"[VideoGen] Omni 任务 {task_id} 状态: {status} ({elapsed}s/{timeout}s)")
@@ -417,6 +496,7 @@ async def _poll_kling_omni_task(
 # ============================================================
 # Kling v3 API（旧版，单镜头图生视频，保留作为回退）
 # ============================================================
+
 
 async def _submit_kling_i2v(
     image_path: str,
@@ -463,10 +543,14 @@ async def _submit_kling_i2v(
         try:
             result = json.loads(resp_text)
         except json.JSONDecodeError:
-            raise RuntimeError(f"Kling API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
+            raise RuntimeError(
+                f"Kling API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}"
+            )
 
     if result.get("code") != 0:
-        raise RuntimeError(f"Kling 任务提交失败 (code={result.get('code')}, msg={result.get('message')}): {result}")
+        raise RuntimeError(
+            f"Kling 任务提交失败 (code={result.get('code')}, msg={result.get('message')}): {result}"
+        )
 
     return result["data"]["task_id"]
 
@@ -494,10 +578,14 @@ async def _poll_kling_task(
             try:
                 result = json.loads(resp_text)
             except json.JSONDecodeError:
-                raise RuntimeError(f"Kling 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
+                raise RuntimeError(
+                    f"Kling 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}"
+                )
 
         if result.get("code") != 0:
-            raise RuntimeError(f"Kling 任务查询失败 (code={result.get('code')}, msg={result.get('message')}): {result}")
+            raise RuntimeError(
+                f"Kling 任务查询失败 (code={result.get('code')}, msg={result.get('message')}): {result}"
+            )
 
         status = result["data"]["task_status"]
 
@@ -508,7 +596,9 @@ async def _poll_kling_task(
             raise RuntimeError("Kling 任务成功但无视频 URL")
 
         elif status == "failed":
-            raise RuntimeError(f"Kling 任务失败: {result['data'].get('task_status_msg', '未知错误')}")
+            raise RuntimeError(
+                f"Kling 任务失败: {result['data'].get('task_status_msg', '未知错误')}"
+            )
 
         elapsed = int(time.time() - start_time)
         print(f"[VideoGen] v3 任务 {task_id} 状态: {status} ({elapsed}s/{timeout}s)")
@@ -520,6 +610,7 @@ async def _poll_kling_task(
 # ============================================================
 # Seedance 1.5 API
 # ============================================================
+
 
 async def _submit_seedance_i2v(
     image_path: str,
@@ -534,7 +625,12 @@ async def _submit_seedance_i2v(
         raise ValueError("Seedance (Volcengine) API Key 未配置")
 
     ext = Path(image_path).suffix.lower()
-    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+    mime_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
     mime_type = mime_map.get(ext, "image/jpeg")
     img_b64 = _image_to_base64(image_path)
     image_data_url = f"data:{mime_type};base64,{img_b64}"
@@ -544,14 +640,8 @@ async def _submit_seedance_i2v(
     payload = {
         "model": config.video_gen.seedance.model or "doubao-seedance-1-5-pro-250528",
         "content": [
-            {
-                "type": "image_url",
-                "image_url": {"url": image_data_url}
-            },
-            {
-                "type": "text",
-                "text": scene.video_prompt
-            }
+            {"type": "image_url", "image_url": {"url": image_data_url}},
+            {"type": "text", "text": scene.video_prompt},
         ],
         "duration": duration,
         "ratio": config.video_gen.seedance.default_ratio or "16:9",
@@ -569,7 +659,9 @@ async def _submit_seedance_i2v(
         try:
             result = json.loads(resp_text)
         except json.JSONDecodeError:
-            raise RuntimeError(f"Seedance API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
+            raise RuntimeError(
+                f"Seedance API 返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}"
+            )
 
     if "id" not in result:
         raise RuntimeError(f"Seedance 任务提交失败: {result}")
@@ -596,7 +688,9 @@ async def _poll_seedance_task(
             try:
                 result = json.loads(resp_text)
             except json.JSONDecodeError:
-                raise RuntimeError(f"Seedance 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}")
+                raise RuntimeError(
+                    f"Seedance 轮询返回非 JSON 响应 (HTTP {resp.status}): {resp_text[:200]}"
+                )
 
         status = result.get("status", "")
 
@@ -618,6 +712,7 @@ async def _poll_seedance_task(
 # ============================================================
 # 统一视频生成接口
 # ============================================================
+
 
 async def generate_video_clip(
     scene: Scene,
@@ -668,7 +763,9 @@ async def generate_video_clip(
 
     if verbose:
         shot_mode = auto_detect_shot_mode(scene)
-        print(f"[VideoGen] Scene {scene.scene_id} 使用引擎: {selected_engine}, shot_mode: {shot_mode}")
+        print(
+            f"[VideoGen] Scene {scene.scene_id} 使用引擎: {selected_engine}, shot_mode: {shot_mode}"
+        )
         print(f"[VideoGen] 视频提示词: {scene.video_prompt[:80]}...")
 
     async with aiohttp.ClientSession() as session:
@@ -690,7 +787,9 @@ async def generate_video_clip(
                     raise RuntimeError("Kling Omni 返回空视频 URL")
             except Exception as omni_err:
                 # 不降级！直接抛出异常，确保全程使用 kling-v3-omni
-                raise RuntimeError(f"[VideoGen] Kling Omni 失败，不降级处理: {omni_err}") from omni_err
+                raise RuntimeError(
+                    f"[VideoGen] Kling Omni 失败，不降级处理: {omni_err}"
+                ) from omni_err
 
         elif selected_engine == "seedance":
             task_id = await _submit_seedance_i2v(image_path, scene, config, session)
@@ -762,7 +861,7 @@ async def generate_video_clips_omni_batch(
     # 按 batch_size 分批处理
     async with aiohttp.ClientSession() as session:
         for i in range(0, len(pending_scenes), batch_size):
-            batch = pending_scenes[i:i + batch_size]
+            batch = pending_scenes[i : i + batch_size]
 
             if verbose:
                 scene_ids = [s.scene_id for s in batch]
@@ -904,16 +1003,18 @@ def generate_all_video_clips_sync(
     resolution: Optional[str] = None,
 ) -> dict[int, str]:
     """generate_all_video_clips 的同步版本"""
-    return asyncio.run(generate_all_video_clips(
-        scenes=scenes,
-        keyframe_paths=keyframe_paths,
-        output_dir=output_dir,
-        engine=engine,
-        auto_route=auto_route,
-        config=config,
-        max_concurrent=max_concurrent,
-        verbose=verbose,
-        reference_images=reference_images,
-        use_omni_batch=use_omni_batch,
-        resolution=resolution,
-    ))
+    return asyncio.run(
+        generate_all_video_clips(
+            scenes=scenes,
+            keyframe_paths=keyframe_paths,
+            output_dir=output_dir,
+            engine=engine,
+            auto_route=auto_route,
+            config=config,
+            max_concurrent=max_concurrent,
+            verbose=verbose,
+            reference_images=reference_images,
+            use_omni_batch=use_omni_batch,
+            resolution=resolution,
+        )
+    )

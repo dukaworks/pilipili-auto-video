@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 全流程真实 API 端到端测试（跳过可灵视频合成）
 
 测试链路：
@@ -8,11 +8,12 @@
   3. MiniMax TTS   → 为每个分镜生成配音（男声/女声分别分配）
 
 运行方式：
-  cd /home/ubuntu/Pilipili-AutoVideo
+  cd /home/ubuntu/ZhiMa-KaiMen
   python3 tests/test_e2e_real.py
 """
 
 import sys, os, asyncio, time
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,16 +29,20 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # 工具函数
 # ============================================================
 
+
 def sep(title: str):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {title}")
-    print('='*60)
+    print("=" * 60)
+
 
 def ok(msg: str):
     print(f"  ✅ {msg}")
 
+
 def fail(msg: str):
     print(f"  ❌ {msg}")
+
 
 def info(msg: str):
     print(f"  ℹ️  {msg}")
@@ -46,6 +51,7 @@ def info(msg: str):
 # ============================================================
 # 主测试流程
 # ============================================================
+
 
 async def run_e2e():
     config = load_config("config.yaml")
@@ -79,9 +85,13 @@ async def run_e2e():
         ok(f"分镜数: {len(script.scenes)}")
         ok(f"角色数: {len(script.characters)}")
         for char in script.characters:
-            info(f"  角色 {char.character_id}: {char.name} ({char.gender}) | {char.appearance_prompt[:60]}...")
+            info(
+                f"  角色 {char.character_id}: {char.name} ({char.gender}) | {char.appearance_prompt[:60]}..."
+            )
         for scene in script.scenes:
-            info(f"  Scene {scene.scene_id}: speaker={scene.speaker_id} | chars={scene.characters_in_scene} | {scene.voiceover[:25]}...")
+            info(
+                f"  Scene {scene.scene_id}: speaker={scene.speaker_id} | chars={scene.characters_in_scene} | {scene.voiceover[:25]}..."
+            )
 
         # 验证：必须有男有女
         genders = {c.gender for c in script.characters}
@@ -93,7 +103,9 @@ async def run_e2e():
 
     except Exception as e:
         fail(f"脚本生成失败: {e}")
-        import traceback; traceback.print_exc()
+        import traceback
+
+        traceback.print_exc()
         all_passed = False
         print("\n❌ 步骤 1 失败，终止后续测试")
         return False
@@ -127,14 +139,16 @@ async def run_e2e():
         for scene_id, path in sorted(img_results.items()):
             size = os.path.getsize(path) if path and os.path.exists(path) else 0
             if size > 10000:
-                ok(f"Scene {scene_id}: {os.path.basename(path)} ({size//1024} KB)")
+                ok(f"Scene {scene_id}: {os.path.basename(path)} ({size // 1024} KB)")
             else:
                 fail(f"Scene {scene_id}: 文件异常，大小 {size} bytes")
                 all_passed = False
 
     except Exception as e:
         fail(f"图像生成失败: {e}")
-        import traceback; traceback.print_exc()
+        import traceback
+
+        traceback.print_exc()
         all_passed = False
 
     # ----------------------------------------------------------
@@ -163,7 +177,9 @@ async def run_e2e():
             speaker_gender = char_gender.get(scene.speaker_id, "?") if scene else "?"
             size = os.path.getsize(audio_path) if audio_path and os.path.exists(audio_path) else 0
             if size > 1000 and duration > 0:
-                ok(f"Scene {scene_id} [{speaker_gender}]: {os.path.basename(audio_path)} | {duration:.2f}s ({size//1024} KB)")
+                ok(
+                    f"Scene {scene_id} [{speaker_gender}]: {os.path.basename(audio_path)} | {duration:.2f}s ({size // 1024} KB)"
+                )
             elif not audio_path:
                 info(f"Scene {scene_id}: 无旁白，跳过")
             else:
@@ -172,7 +188,9 @@ async def run_e2e():
 
     except Exception as e:
         fail(f"TTS 生成失败: {e}")
-        import traceback; traceback.print_exc()
+        import traceback
+
+        traceback.print_exc()
         all_passed = False
 
     # ----------------------------------------------------------
@@ -188,7 +206,7 @@ async def run_e2e():
     for fname in sorted(os.listdir(OUTPUT_DIR)):
         fpath = os.path.join(OUTPUT_DIR, fname)
         size = os.path.getsize(fpath)
-        print(f"  {fname}  ({size//1024} KB)")
+        print(f"  {fname}  ({size // 1024} KB)")
 
     return all_passed
 

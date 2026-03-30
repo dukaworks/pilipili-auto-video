@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 CLI 命令行入口
 
 用法示例：
@@ -41,22 +41,14 @@ from modules.memory import get_memory_manager
 console = Console()
 
 LOGO = """
-[bold cyan]
-  ██████╗ ██╗██╗     ██╗██████╗ ██╗██╗     ██╗
-  ██╔══██╗██║██║     ██║██╔══██╗██║██║     ██║
-  ██████╔╝██║██║     ██║██████╔╝██║██║     ██║
-  ██╔═══╝ ██║██║     ██║██╔═══╝ ██║██║     ██║
-  ██║     ██║███████╗██║██║     ██║███████╗██║
-  ╚═╝     ╚═╝╚══════╝╚═╝╚═╝     ╚═╝╚══════╝╚═╝
-[/bold cyan]
-[dim]噼哩噼哩 AutoVideo - 全自动 AI 视频生成代理 v1.0.0[/dim]
+[bold cyan]芝麻开门 OpenDoor[/bold cyan] - 全自动 AI 视频生成代理 v1.0.0
 """
 
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="pilipili")
+@click.version_option(version="1.0.0", prog_name="opendoor")
 def cli():
-    """噼哩噼哩 Pilipili-AutoVideo - 全自动 AI 视频生成代理"""
+    """芝麻开门 Open-Door - 全自动 AI 视频生成代理"""
     pass
 
 
@@ -64,31 +56,46 @@ def cli():
 # run 命令：完整工作流
 # ============================================================
 
+
 @cli.command()
 @click.option("--topic", "-t", required=True, help="视频主题（自然语言描述）")
 @click.option("--style", "-s", default=None, help="风格描述，如 '科技感，蓝紫色调'")
 @click.option("--duration", "-d", default=60, type=int, help="目标时长（秒），默认 60")
-@click.option("--engine", "-e", default="kling",
-              type=click.Choice(["kling", "seedance", "auto"]),
-              help="视频生成引擎，默认 kling")
+@click.option(
+    "--engine",
+    "-e",
+    default="kling",
+    type=click.Choice(["kling", "seedance", "auto"]),
+    help="视频生成引擎，默认 kling",
+)
 @click.option("--voice", "-v", default=None, help="TTS 音色 ID")
 @click.option("--no-subtitles", is_flag=True, default=False, help="不添加字幕")
 @click.option("--no-review", is_flag=True, default=False, help="跳过人工审核直接生成")
 @click.option("--output", "-o", default=None, help="输出目录（默认使用配置文件中的路径）")
 @click.option("--config-file", default=None, help="配置文件路径")
 @click.option("--verbose", is_flag=True, default=False, help="显示详细日志")
-@click.option("--reference-image", "-r", multiple=True,
-              help="角色参考图路径（可多次指定）")
-def run(topic, style, duration, engine, voice, no_subtitles, no_review,
-        output, config_file, verbose, reference_image):
+@click.option("--reference-image", "-r", multiple=True, help="角色参考图路径（可多次指定）")
+def run(
+    topic,
+    style,
+    duration,
+    engine,
+    voice,
+    no_subtitles,
+    no_review,
+    output,
+    config_file,
+    verbose,
+    reference_image,
+):
     """
     完整视频生成工作流
 
     从自然语言主题到最终成片，全程自动化。
 
     示例：
-      pilipili run --topic "AI 改变世界" --style "科技感"
-      pilipili run --topic "西藏旅行" --duration 90 --engine seedance
+      opendoor run --topic "AI 改变世界" --style "科技感"
+      opendoor run --topic "西藏旅行" --duration 90 --engine seedance
     """
     console.print(LOGO)
 
@@ -103,22 +110,25 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
     if output:
         config.local.output_dir = output
 
-    console.print(Panel(
-        f"[bold]主题：[/bold]{topic}\n"
-        f"[bold]风格：[/bold]{style or '自动'}\n"
-        f"[bold]时长：[/bold]{duration}s\n"
-        f"[bold]引擎：[/bold]{engine.upper()}\n"
-        f"[bold]字幕：[/bold]{'否' if no_subtitles else '是'}\n"
-        f"[bold]人工审核：[/bold]{'跳过' if no_review else '开启'}",
-        title="[bold cyan]任务配置[/bold cyan]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel(
+            f"[bold]主题：[/bold]{topic}\n"
+            f"[bold]风格：[/bold]{style or '自动'}\n"
+            f"[bold]时长：[/bold]{duration}s\n"
+            f"[bold]引擎：[/bold]{engine.upper()}\n"
+            f"[bold]字幕：[/bold]{'否' if no_subtitles else '是'}\n"
+            f"[bold]人工审核：[/bold]{'跳过' if no_review else '开启'}",
+            title="[bold cyan]任务配置[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     # 检查 API Keys
     _check_api_keys(config)
 
     # 创建项目目录
     import uuid
+
     project_id = str(uuid.uuid4())[:8]
     project_dir = os.path.join(config.local.output_dir, project_id)
     os.makedirs(project_dir, exist_ok=True)
@@ -141,7 +151,9 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
                 verbose=verbose,
             )
 
-        console.print(f"[green]✓[/green] 脚本生成完成：《{script.title}》，共 {len(script.scenes)} 个分镜")
+        console.print(
+            f"[green]✓[/green] 脚本生成完成：《{script.title}》，共 {len(script.scenes)} 个分镜"
+        )
 
         # 保存脚本
         script_path = os.path.join(project_dir, "script.json")
@@ -236,7 +248,7 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
         clips_dir = os.path.join(project_dir, "clips")
 
         selected_engine = None if engine == "auto" else engine
-        auto_route = (engine == "auto")
+        auto_route = engine == "auto"
 
         with Progress(
             SpinnerColumn(),
@@ -247,8 +259,7 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
             console=console,
         ) as progress:
             task_vid = progress.add_task(
-                f"[yellow]使用 {engine.upper()} 生成视频片段...",
-                total=len(script.scenes)
+                f"[yellow]使用 {engine.upper()} 生成视频片段...", total=len(script.scenes)
             )
 
             video_clips = generate_all_video_clips_sync(
@@ -301,16 +312,18 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
         # ── 完成 ──────────────────────────────────────────────
         total_duration = sum(s.duration for s in script.scenes)
 
-        console.print(Panel(
-            f"[bold green]🎉 视频生成完成！[/bold green]\n\n"
-            f"[bold]标题：[/bold]{script.title}\n"
-            f"[bold]总时长：[/bold]{total_duration:.1f} 秒\n"
-            f"[bold]分镜数：[/bold]{len(script.scenes)} 个\n\n"
-            f"[bold]成品视频：[/bold]\n  {final_video}\n\n"
-            f"[bold]剪映草稿：[/bold]\n  {draft_dir}",
-            title="[bold green]生成完成[/bold green]",
-            border_style="green"
-        ))
+        console.print(
+            Panel(
+                f"[bold green]🎉 视频生成完成！[/bold green]\n\n"
+                f"[bold]标题：[/bold]{script.title}\n"
+                f"[bold]总时长：[/bold]{total_duration:.1f} 秒\n"
+                f"[bold]分镜数：[/bold]{len(script.scenes)} 个\n\n"
+                f"[bold]成品视频：[/bold]\n  {final_video}\n\n"
+                f"[bold]剪映草稿：[/bold]\n  {draft_dir}",
+                title="[bold green]生成完成[/bold green]",
+                border_style="green",
+            )
+        )
 
         # 询问评分（用于记忆学习）
         _ask_rating(memory, project_id)
@@ -322,6 +335,7 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
         console.print(f"\n[bold red]✗ 工作流失败: {e}[/bold red]")
         if verbose:
             import traceback
+
             console.print_exception()
         sys.exit(1)
 
@@ -329,6 +343,7 @@ def run(topic, style, duration, engine, voice, no_subtitles, no_review,
 # ============================================================
 # server 命令：启动 Web UI 后端
 # ============================================================
+
 
 @cli.command()
 @click.option("--host", default="0.0.0.0", help="监听地址")
@@ -345,6 +360,7 @@ def server(host, port, reload, config_file):
         os.environ["PILIPILI_CONFIG"] = config_file
 
     import uvicorn
+
     uvicorn.run(
         "api.server:app",
         host=host,
@@ -358,11 +374,17 @@ def server(host, port, reload, config_file):
 # config 命令：配置管理
 # ============================================================
 
+
 @cli.command()
 @click.option("--show", is_flag=True, help="显示当前配置（隐藏敏感信息）")
 @click.option("--init", is_flag=True, help="初始化配置文件")
-@click.option("--set", "set_value", nargs=2, metavar="KEY VALUE",
-              help="设置配置项，如 --set llm.default_provider deepseek")
+@click.option(
+    "--set",
+    "set_value",
+    nargs=2,
+    metavar="KEY VALUE",
+    help="设置配置项，如 --set llm.default_provider deepseek",
+)
 def config(show, init, set_value):
     """配置管理"""
     if init:
@@ -378,6 +400,7 @@ def config(show, init, set_value):
 # ============================================================
 # script 命令：仅生成脚本（不生成视频）
 # ============================================================
+
 
 @cli.command()
 @click.option("--topic", "-t", required=True, help="视频主题")
@@ -416,9 +439,13 @@ ALL_MODULES = ["llm", "image", "tts", "video", "ffmpeg"]
 
 
 @cli.command()
-@click.option("--module", "-m", default="all",
-              type=click.Choice(["all"] + ALL_MODULES),
-              help="要测试的模块（默认 all 全部）")
+@click.option(
+    "--module",
+    "-m",
+    default="all",
+    type=click.Choice(["all"] + ALL_MODULES),
+    help="要测试的模块（默认 all 全部）",
+)
 @click.option("--verbose", is_flag=True, default=False, help="显示详细日志")
 def test(module, verbose):
     """
@@ -427,9 +454,9 @@ def test(module, verbose):
     快速验证各 API Key 是否可用，无需走完整工作流。
 
     示例：
-      pilipili test                    # 测试全部模块
-      pilipili test --module llm       # 只测试 LLM
-      pilipili test --module video     # 只测试 Kling/Seedance
+      opendoor test                    # 测试全部模块
+      opendoor test --module llm       # 只测试 LLM
+      opendoor test --module video     # 只测试 Kling/Seedance
     """
     console.print(LOGO)
     config = get_config()
@@ -463,7 +490,9 @@ def test(module, verbose):
     if passed == total:
         console.print(f"\n[bold green]全部 {total} 个模块测试通过！[/bold green]")
     else:
-        console.print(f"\n[bold yellow]{passed}/{total} 个模块通过，{total - passed} 个失败[/bold yellow]")
+        console.print(
+            f"\n[bold yellow]{passed}/{total} 个模块通过，{total - passed} 个失败[/bold yellow]"
+        )
         sys.exit(1)
 
 
@@ -489,6 +518,7 @@ def _test_module(module: str, config: PilipiliConfig, verbose: bool) -> tuple[bo
 def _test_llm(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
     """测试 LLM API 连接"""
     from core.config import get_active_llm_config
+
     provider = config.llm.default_provider
     provider_cfg = get_active_llm_config(config)
 
@@ -496,15 +526,16 @@ def _test_llm(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
         return False, f"{provider} API Key 未配置"
 
     from openai import OpenAI
+
     if provider == "gemini":
         client = OpenAI(
             api_key=provider_cfg.api_key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
     else:
         client = OpenAI(
             api_key=provider_cfg.api_key,
-            base_url=provider_cfg.base_url or "https://api.openai.com/v1"
+            base_url=provider_cfg.base_url or "https://api.openai.com/v1",
         )
 
     resp = client.chat.completions.create(
@@ -523,6 +554,7 @@ def _test_image(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
 
     from google import genai
     from google.genai import types
+
     client = genai.Client(api_key=config.image_gen.api_key)
 
     # 用一个极简提示词测试连接（只生成一张小图）
@@ -531,7 +563,7 @@ def _test_image(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
         contents="Generate a tiny 64x64 red square image",
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],
-        )
+        ),
     )
 
     has_image = False
@@ -552,6 +584,7 @@ def _test_tts(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
         return False, "MiniMax TTS API Key 未配置"
 
     import requests
+
     payload = {
         "model": config.tts.model,
         "text": "测试",
@@ -567,7 +600,7 @@ def _test_tts(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
             "bitrate": 128000,
             "format": "mp3",
             "channel": 1,
-        }
+        },
     }
     headers = {
         "Authorization": f"Bearer {config.tts.api_key}",
@@ -597,10 +630,12 @@ def _test_video(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
             return False, "Kling API Key 或 Secret 未配置"
 
         from modules.video_gen import _generate_kling_jwt
+
         token = _generate_kling_jwt(kling_cfg.api_key, kling_cfg.api_secret)
 
         # 调用 Kling 查询接口验证 Token 有效性
         import requests
+
         url = f"{kling_cfg.base_url}/v1/videos/image2video/nonexistent_task_id"
         headers = {"Authorization": f"Bearer {token}"}
         resp = requests.get(url, headers=headers, timeout=15)
@@ -636,11 +671,14 @@ def _test_video(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
 def _test_ffmpeg(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
     """测试 FFmpeg 是否可用"""
     import subprocess
+
     ffmpeg_path = config.local.ffmpeg_path or "ffmpeg"
     try:
         result = subprocess.run(
             [ffmpeg_path, "-version"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             # 提取版本号
@@ -657,6 +695,7 @@ def _test_ffmpeg(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
 # ============================================================
 # 辅助函数
 # ============================================================
+
 
 def _check_api_keys(config: PilipiliConfig):
     """检查必要的 API Keys 是否已配置"""
@@ -681,13 +720,15 @@ def _check_api_keys(config: PilipiliConfig):
             missing.append("Seedance (Volcengine) API Key")
 
     if missing:
-        console.print(Panel(
-            "[bold red]以下 API Keys 未配置：[/bold red]\n" +
-            "\n".join(f"  • {k}" for k in missing) +
-            "\n\n[dim]请编辑 configs/config.yaml 或设置对应环境变量[/dim]",
-            title="[bold red]配置缺失[/bold red]",
-            border_style="red"
-        ))
+        console.print(
+            Panel(
+                "[bold red]以下 API Keys 未配置：[/bold red]\n"
+                + "\n".join(f"  • {k}" for k in missing)
+                + "\n\n[dim]请编辑 configs/config.yaml 或设置对应环境变量[/dim]",
+                title="[bold red]配置缺失[/bold red]",
+                border_style="red",
+            )
+        )
         sys.exit(1)
 
 
@@ -710,18 +751,22 @@ def _print_script_preview(script):
         )
 
     console.print(table)
-    console.print(f"[dim]总时长预估: {sum(s.duration for s in script.scenes):.0f}s，{len(script.scenes)} 个分镜[/dim]\n")
+    console.print(
+        f"[dim]总时长预估: {sum(s.duration for s in script.scenes):.0f}s，{len(script.scenes)} 个分镜[/dim]\n"
+    )
 
 
 def _interactive_review(script) -> bool:
     """交互式审核分镜脚本"""
-    console.print(Panel(
-        "[bold yellow]⚠️  人工审核关卡[/bold yellow]\n\n"
-        "请检查以上分镜内容。\n"
-        "确认后将开始调用付费 API 生成图片、配音和视频。\n\n"
-        "[dim]提示：如需修改分镜，请直接编辑 script.json 后重新运行[/dim]",
-        border_style="yellow"
-    ))
+    console.print(
+        Panel(
+            "[bold yellow]⚠️  人工审核关卡[/bold yellow]\n\n"
+            "请检查以上分镜内容。\n"
+            "确认后将开始调用付费 API 生成图片、配音和视频。\n\n"
+            "[dim]提示：如需修改分镜，请直接编辑 script.json 后重新运行[/dim]",
+            border_style="yellow",
+        )
+    )
 
     choice = click.prompt(
         "是否继续生成？",
@@ -770,6 +815,7 @@ def _init_config():
     example_path = Path(__file__).parent.parent / "configs" / "config.example.yaml"
     if example_path.exists():
         import shutil
+
         shutil.copy2(example_path, config_path)
         console.print(f"[green]✓[/green] 配置文件已创建: {config_path}")
         console.print("[dim]请编辑配置文件，填入你的 API Keys[/dim]")
@@ -791,7 +837,10 @@ def _show_config():
     table.add_column("值")
 
     table.add_row("LLM 提供商", config.llm.default_provider)
-    table.add_row("LLM API Key", mask(getattr(getattr(config.llm, config.llm.default_provider, None), "api_key", "")))
+    table.add_row(
+        "LLM API Key",
+        mask(getattr(getattr(config.llm, config.llm.default_provider, None), "api_key", "")),
+    )
     table.add_row("图像生成", config.image_gen.provider)
     table.add_row("图像 API Key", mask(config.image_gen.api_key))
     table.add_row("TTS 提供商", config.tts.default_provider)
@@ -799,7 +848,9 @@ def _show_config():
     table.add_row("视频引擎", config.video_gen.default_provider)
     table.add_row("Kling API Key", mask(config.video_gen.kling.api_key))
     table.add_row("输出目录", config.local.output_dir)
-    table.add_row("记忆系统", f"{config.memory.provider} ({'启用' if config.memory.enabled else '禁用'})")
+    table.add_row(
+        "记忆系统", f"{config.memory.provider} ({'启用' if config.memory.enabled else '禁用'})"
+    )
 
     console.print(table)
 
@@ -810,7 +861,7 @@ def _set_config(key: str, value: str):
 
     config_path = Path("configs/config.yaml")
     if not config_path.exists():
-        console.print("[red]配置文件不存在，请先运行 pilipili config --init[/red]")
+        console.print("[red]配置文件不存在，请先运行 opendoor config --init[/red]")
         return
 
     with open(config_path, "r", encoding="utf-8") as f:

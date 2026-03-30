@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 记忆系统 - Mem0 + 程序性记忆（借鉴 Agent-S）
 
 职责：
@@ -23,32 +23,36 @@ from core.config import PilipiliConfig, get_config
 # 数据结构
 # ============================================================
 
+
 @dataclass
 class StyleMemory:
     """用户风格偏好记忆"""
-    visual_style: list[str]        # 视觉风格标签（如 "赛博朋克", "冷色调"）
-    pacing: str                    # 节奏偏好（"fast" / "medium" / "slow"）
-    avg_scene_duration: float      # 平均分镜时长（秒）
+
+    visual_style: list[str]  # 视觉风格标签（如 "赛博朋克", "冷色调"）
+    pacing: str  # 节奏偏好（"fast" / "medium" / "slow"）
+    avg_scene_duration: float  # 平均分镜时长（秒）
     preferred_transitions: list[str]  # 常用转场
     preferred_camera_motions: list[str]  # 常用镜头运动
-    tone: str                      # 内容基调（"inspiring" / "educational" / "entertaining"）
-    voice_id: str                  # 常用音色
+    tone: str  # 内容基调（"inspiring" / "educational" / "entertaining"）
+    voice_id: str  # 常用音色
     image_style_keywords: list[str]  # 常用生图关键词
 
 
 @dataclass
 class ProceduralMemory:
     """程序性记忆：成功的提示词模式（借鉴 Agent-S）"""
-    topic_category: str            # 主题类别（如 "科技", "旅行", "美食"）
+
+    topic_category: str  # 主题类别（如 "科技", "旅行", "美食"）
     successful_image_prompts: list[str]  # 效果好的生图提示词
     successful_video_prompts: list[str]  # 效果好的视频提示词
     successful_script_patterns: list[str]  # 效果好的脚本结构
-    engine_preference: str         # 该类主题偏好的视频引擎
+    engine_preference: str  # 该类主题偏好的视频引擎
 
 
 # ============================================================
 # 本地 SQLite 记忆存储
 # ============================================================
+
 
 class LocalMemoryStore:
     """基于 SQLite 的本地记忆存储"""
@@ -109,21 +113,24 @@ class LocalMemoryStore:
         """保存或更新风格偏好"""
         now = datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO style_preferences (user_id, key, value, weight, updated_at)
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, key) DO UPDATE SET
                     value = excluded.value,
                     weight = excluded.weight,
                     updated_at = excluded.updated_at
-            """, (user_id, key, value, weight, now))
+            """,
+                (user_id, key, value, weight, now),
+            )
 
     def get_style_preferences(self, user_id: str) -> dict:
         """获取用户所有风格偏好"""
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(
                 "SELECT key, value, weight FROM style_preferences WHERE user_id = ? ORDER BY weight DESC",
-                (user_id,)
+                (user_id,),
             ).fetchall()
         return {row[0]: {"value": row[1], "weight": row[2]} for row in rows}
 
@@ -133,62 +140,86 @@ class LocalMemoryStore:
         """保存程序性记忆，相同内容则增加成功计数"""
         now = datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
-            existing = conn.execute("""
+            existing = conn.execute(
+                """
                 SELECT id, success_count FROM procedural_memories
                 WHERE user_id = ? AND topic_category = ? AND memory_type = ? AND content = ?
-            """, (user_id, topic_category, memory_type, content)).fetchone()
+            """,
+                (user_id, topic_category, memory_type, content),
+            ).fetchone()
 
             if existing:
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE procedural_memories
                     SET success_count = success_count + 1, updated_at = ?
                     WHERE id = ?
-                """, (now, existing[0]))
+                """,
+                    (now, existing[0]),
+                )
             else:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO procedural_memories
                     (user_id, topic_category, memory_type, content, success_count, created_at, updated_at)
                     VALUES (?, ?, ?, ?, 1, ?, ?)
-                """, (user_id, topic_category, memory_type, content, now, now))
+                """,
+                    (user_id, topic_category, memory_type, content, now, now),
+                )
 
     def get_procedural_memories(
         self, user_id: str, topic_category: str, memory_type: str, limit: int = 5
     ) -> list[str]:
         """获取最成功的程序性记忆"""
         with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT content FROM procedural_memories
                 WHERE user_id = ? AND topic_category = ? AND memory_type = ?
                 ORDER BY success_count DESC LIMIT ?
-            """, (user_id, topic_category, memory_type, limit)).fetchall()
+            """,
+                (user_id, topic_category, memory_type, limit),
+            ).fetchall()
         return [row[0] for row in rows]
 
     def save_project(self, user_id: str, project_id: str, topic: str, style: str, script_json: str):
         """保存项目历史"""
         now = datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO project_history (user_id, project_id, topic, style, script_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (user_id, project_id, topic, style, script_json, now))
+            """,
+                (user_id, project_id, topic, style, script_json, now),
+            )
 
     def save_feedback(
-        self, user_id: str, project_id: str, scene_id: Optional[int],
-        event_type: str, old_value: str = "", new_value: str = ""
+        self,
+        user_id: str,
+        project_id: str,
+        scene_id: Optional[int],
+        event_type: str,
+        old_value: str = "",
+        new_value: str = "",
     ):
         """保存用户反馈事件（用于隐式学习）"""
         now = datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO feedback_events
                 (user_id, project_id, scene_id, event_type, old_value, new_value, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (user_id, project_id, scene_id, event_type, old_value, new_value, now))
+            """,
+                (user_id, project_id, scene_id, event_type, old_value, new_value, now),
+            )
 
 
 # ============================================================
 # 记忆管理器（高层接口）
 # ============================================================
+
 
 class MemoryManager:
     """
@@ -215,6 +246,7 @@ class MemoryManager:
         if config.memory.provider == "mem0" and config.memory.mem0_api_key:
             try:
                 from mem0 import MemoryClient
+
                 self.mem0_client = MemoryClient(api_key=config.memory.mem0_api_key)
             except ImportError:
                 pass
@@ -247,8 +279,8 @@ class MemoryManager:
         )
         if successful_prompts:
             context_parts.append(
-                f"该类主题（{topic_category}）历史上效果好的生图提示词风格：\n" +
-                "\n".join(f"  - {p[:80]}" for p in successful_prompts)
+                f"该类主题（{topic_category}）历史上效果好的生图提示词风格：\n"
+                + "\n".join(f"  - {p[:80]}" for p in successful_prompts)
             )
 
         # 3. 从 Mem0 获取语义记忆（如果可用）
@@ -291,6 +323,7 @@ class MemoryManager:
         if all_tags:
             # 统计最常用的标签
             from collections import Counter
+
             tag_counts = Counter(all_tags)
             top_tags = [tag for tag, _ in tag_counts.most_common(5)]
             self.local_store.save_style_preference(
@@ -300,15 +333,17 @@ class MemoryManager:
         # 学习转场偏好
         transitions = [s.get("transition", "crossfade") for s in scenes]
         from collections import Counter
+
         top_transition = Counter(transitions).most_common(1)[0][0]
         self.local_store.save_style_preference(self.user_id, "preferred_transition", top_transition)
 
         # 保存项目历史
         self.local_store.save_project(
-            self.user_id, project_id,
+            self.user_id,
+            project_id,
             script_data.get("topic", ""),
             script_data.get("style", ""),
-            json.dumps(script_data, ensure_ascii=False)
+            json.dumps(script_data, ensure_ascii=False),
         )
 
     def learn_from_user_edit(
@@ -328,8 +363,7 @@ class MemoryManager:
             return
 
         self.local_store.save_feedback(
-            self.user_id, project_id, scene_id,
-            f"edit_{field}", old_value, new_value
+            self.user_id, project_id, scene_id, f"edit_{field}", old_value, new_value
         )
 
         # 如果用户修改了 image_prompt，记录为成功的提示词模式
@@ -351,20 +385,26 @@ class MemoryManager:
         if rating >= 4:
             # 高评分：强化当前风格偏好
             with sqlite3.connect(self.local_store.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE style_preferences
                     SET weight = MIN(weight * 1.2, 5.0)
                     WHERE user_id = ?
-                """, (self.user_id,))
+                """,
+                    (self.user_id,),
+                )
 
         elif rating <= 2:
             # 低评分：降低当前风格偏好权重
             with sqlite3.connect(self.local_store.db_path) as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE style_preferences
                     SET weight = MAX(weight * 0.8, 0.1)
                     WHERE user_id = ?
-                """, (self.user_id,))
+                """,
+                    (self.user_id,),
+                )
 
     def _classify_topic(self, topic: str) -> str:
         """简单的主题分类（用于程序性记忆检索）"""

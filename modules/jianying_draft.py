@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 剪映草稿生成模块 - pyJianYingDraft
 
 职责：
@@ -24,11 +24,13 @@ def _get_media_duration(filepath: str) -> Optional[float]:
     """用 ffprobe 获取媒体文件实际时长（秒），失败返回 None"""
     try:
         result = subprocess.run(
-            ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', filepath],
-            capture_output=True, text=True, timeout=10,
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", filepath],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         info = json.loads(result.stdout)
-        return float(info['format']['duration'])
+        return float(info["format"]["duration"])
     except Exception:
         return None
 
@@ -38,7 +40,7 @@ def generate_jianying_draft(
     video_clips: dict[int, str],
     audio_clips: dict[int, str],
     output_dir: str,
-    project_name: str = "噼哩噼哩作品",
+    project_name: str = "芝麻开门作品",
     verbose: bool = False,
 ) -> str:
     """
@@ -62,6 +64,7 @@ def generate_jianying_draft(
     """
     try:
         import pyJianYingDraft as draft
+
         return _generate_with_pyjianyingdraft(
             script, video_clips, audio_clips, output_dir, project_name, verbose
         )
@@ -120,9 +123,9 @@ def _generate_with_pyjianyingdraft(
     # ── 创建轨道 ──────────────────────────────────────────────
     # v2.0：每个分镜独立片段，所有片段都在同一轨道上按时间顺序排列
     # 这样在剪映中可以看到每个分镜是独立的素材，可以单独替换
-    jy_draft.add_track(draft.TrackType.video)           # 主视频轨道（多片段）
-    jy_draft.add_track(draft.TrackType.audio, "配音")   # 配音轨道（多片段）
-    jy_draft.add_track(draft.TrackType.text, "字幕")    # 字幕轨道（多片段）
+    jy_draft.add_track(draft.TrackType.video)  # 主视频轨道（多片段）
+    jy_draft.add_track(draft.TrackType.audio, "配音")  # 配音轨道（多片段）
+    jy_draft.add_track(draft.TrackType.text, "字幕")  # 字幕轨道（多片段）
 
     # ── 逐分镜添加片段 ────────────────────────────────────────
     current_s = 0.0
@@ -223,30 +226,38 @@ def _generate_scene_manifest(
         "resolution": "1920x1080",
         "fps": 30,
         "note": "v2.0 分轨模式：每个分镜为独立片段，可在剪映中单独替换",
-        "scenes": []
+        "scenes": [],
     }
 
     for scene in script.scenes:
         video_path = video_clips.get(scene.scene_id, "")
         audio_path = audio_clips.get(scene.scene_id, "")
-        video_dur = _get_media_duration(video_path) if video_path and os.path.exists(video_path) else scene.duration
-        audio_dur = _get_media_duration(audio_path) if audio_path and os.path.exists(audio_path) else None
+        video_dur = (
+            _get_media_duration(video_path)
+            if video_path and os.path.exists(video_path)
+            else scene.duration
+        )
+        audio_dur = (
+            _get_media_duration(audio_path) if audio_path and os.path.exists(audio_path) else None
+        )
 
-        manifest["scenes"].append({
-            "scene_id": scene.scene_id,
-            "duration_planned": scene.duration,
-            "duration_actual": video_dur,
-            "audio_duration": audio_dur,
-            "voiceover": scene.voiceover,
-            "image_prompt": scene.image_prompt,
-            "video_prompt": scene.video_prompt,
-            "shot_mode": getattr(scene, "shot_mode", "i2v"),
-            "transition": scene.transition,
-            "camera_motion": scene.camera_motion,
-            "style_tags": scene.style_tags,
-            "video_clip": os.path.abspath(video_path) if video_path else "",
-            "audio_clip": os.path.abspath(audio_path) if audio_path else "",
-        })
+        manifest["scenes"].append(
+            {
+                "scene_id": scene.scene_id,
+                "duration_planned": scene.duration,
+                "duration_actual": video_dur,
+                "audio_duration": audio_dur,
+                "voiceover": scene.voiceover,
+                "image_prompt": scene.image_prompt,
+                "video_prompt": scene.video_prompt,
+                "shot_mode": getattr(scene, "shot_mode", "i2v"),
+                "transition": scene.transition,
+                "camera_motion": scene.camera_motion,
+                "style_tags": scene.style_tags,
+                "video_clip": os.path.abspath(video_path) if video_path else "",
+                "audio_clip": os.path.abspath(audio_path) if audio_path else "",
+            }
+        )
 
     manifest_path = os.path.join(output_dir, f"{project_name}_manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
@@ -295,7 +306,9 @@ def _generate_edl_fallback(
 
         edl_lines.append(f"{i:03d}  AX       V     C        {src_in} {src_out} {rec_in} {rec_out}")
         edl_lines.append(f"* FROM CLIP NAME: {os.path.basename(video_path)}")
-        edl_lines.append(f"* SCENE {scene.scene_id}: {scene.voiceover[:50] if scene.voiceover else ''}")
+        edl_lines.append(
+            f"* SCENE {scene.scene_id}: {scene.voiceover[:50] if scene.voiceover else ''}"
+        )
         edl_lines.append("")
 
         current_tc += duration_frames
@@ -313,9 +326,9 @@ def _generate_edl_fallback(
     # 生成操作说明
     readme_path = os.path.join(output_dir, "导入说明.txt")
     with open(readme_path, "w", encoding="utf-8") as f:
-        f.write(f"""噼哩噼哩 v2.0 - {project_name} 工程文件（分轨模式）
+        f.write(f"""芝麻开门 v2.0 - {project_name} 工程文件（分轨模式）
 
-生成时间：{__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+生成时间：{__import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 【v2.0 重要更新】
 本次导出为"分轨模式"：每个分镜作为独立片段，可在剪映中单独替换！

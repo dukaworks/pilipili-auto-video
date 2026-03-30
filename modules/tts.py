@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 TTS 配音模块 - MiniMax Speech
 
 职责：
@@ -32,15 +32,15 @@ MINIMAX_TTS_URL = "https://api.minimax.chat/v1/t2a_v2"
 # 可用音色列表（MiniMax 系统音色，已验证存在）
 VOICE_OPTIONS = {
     # 女声
-    "female_shaonv": "female-shaonv",      # 少女音（默认）
-    "female_yujie": "female-yujie",        # 御姐音
+    "female_shaonv": "female-shaonv",  # 少女音（默认）
+    "female_yujie": "female-yujie",  # 御姐音
     "female_chengshu": "female-chengshu",  # 成熟女声
-    "female_tianmei": "female-tianmei",    # 甜美音
+    "female_tianmei": "female-tianmei",  # 甜美音
     # 男声
-    "male_qn_qingse": "male-qn-qingse",    # 青涩青年音色
-    "male_qn_jingying": "male-qn-jingying", # 精英青年音色
-    "male_qn_badao": "male-qn-badao",      # 霸道青年音色
-    "male_qn_daxuesheng": "male-qn-daxuesheng", # 青年大学生音色
+    "male_qn_qingse": "male-qn-qingse",  # 青涩青年音色
+    "male_qn_jingying": "male-qn-jingying",  # 精英青年音色
+    "male_qn_badao": "male-qn-badao",  # 霸道青年音色
+    "male_qn_daxuesheng": "male-qn-daxuesheng",  # 青年大学生音色
 }
 
 # 情绪选项
@@ -50,6 +50,7 @@ EMOTION_OPTIONS = ["neutral", "happy", "sad", "angry", "fearful", "disgusted", "
 # ============================================================
 # 核心生成函数
 # ============================================================
+
 
 async def generate_voiceover(
     scene: Scene,
@@ -121,7 +122,7 @@ async def generate_voiceover(
             "bitrate": 128000,
             "format": "mp3",
             "channel": 1,
-        }
+        },
     }
 
     # 添加情绪（如果不是 neutral）
@@ -149,16 +150,20 @@ async def generate_voiceover(
         base_resp = result.get("base_resp", {})
         status_code = base_resp.get("status_code", 0)
         if status_code in (1002, 1004):  # 1002=RPM限速, 1004=TPM限速
-            wait_sec = 2 ** attempt * 5  # 5s, 10s, 20s, 40s
+            wait_sec = 2**attempt * 5  # 5s, 10s, 20s, 40s
             if verbose:
-                print(f"[TTS] Scene {scene.scene_id} 限速 ({base_resp.get('status_msg', '')})，{wait_sec}s 后重试 (attempt {attempt+1}/{MAX_RETRIES})...")
+                print(
+                    f"[TTS] Scene {scene.scene_id} 限速 ({base_resp.get('status_msg', '')})，{wait_sec}s 后重试 (attempt {attempt + 1}/{MAX_RETRIES})..."
+                )
             await asyncio.sleep(wait_sec)
             result = None
             continue
         break  # 成功或其他错误，退出重试循环
 
     if result is None:
-        raise RuntimeError(f"MiniMax TTS Scene {scene.scene_id} 重试 {MAX_RETRIES} 次后仍限速，请稍后再试")
+        raise RuntimeError(
+            f"MiniMax TTS Scene {scene.scene_id} 重试 {MAX_RETRIES} 次后仍限速，请稍后再试"
+        )
 
     # 提取音频数据
     if "data" not in result or "audio" not in result["data"]:
@@ -174,14 +179,16 @@ async def generate_voiceover(
     duration = get_audio_duration(output_path)
 
     if verbose:
-        print(f"[TTS] Scene {scene.scene_id} 配音完成，时长: {duration:.2f}s，保存至: {output_path}")
+        print(
+            f"[TTS] Scene {scene.scene_id} 配音完成，时长: {duration:.2f}s，保存至: {output_path}"
+        )
 
     return output_path, duration
 
 
 # 性别默认音色映射（MiniMax 系统音色，已验证存在）
 DEFAULT_VOICE_BY_GENDER = {
-    "male": "male-qn-qingse",   # 青涩青年音色
+    "male": "male-qn-qingse",  # 青涩青年音色
     "female": "female-shaonv",  # 少女音色
 }
 
@@ -201,11 +208,12 @@ def _infer_voice_from_voiceover(voiceover: str) -> str:
     - 混合对话（同时含男：和女：）→ 旁白成熟女声（单段无法拆分时的回退）
     """
     import re
-    has_male = bool(re.search(r'男[（(\w]*[）)]?[：:]', voiceover))
-    has_female = bool(re.search(r'女[（(\w]*[）)]?[：:]', voiceover))
+
+    has_male = bool(re.search(r"男[（(\w]*[）)]?[：:]", voiceover))
+    has_female = bool(re.search(r"女[（(\w]*[）)]?[：:]", voiceover))
 
     if has_male and not has_female:
-        return DEFAULT_VOICE_BY_GENDER["male"]   # 纯男声台词
+        return DEFAULT_VOICE_BY_GENDER["male"]  # 纯男声台词
     elif has_female and not has_male:
         return DEFAULT_VOICE_BY_GENDER["female"]  # 纯女声台词
     else:
@@ -227,25 +235,26 @@ def _split_voiceover_by_speaker(voiceover: str) -> list[tuple[str, str]]:
     [('female', '你好。'), ('male', '你好啊。'), ('female', '再见。')]
     """
     import re
+
     # 匹配说话人前缀：男： / 女： / 男（xxx）： / 女（xxx）：
-    SPEAKER_PATTERN = re.compile(r'(男[（(][^）)]*[）)]：|女[（(][^）)]*[）)]：|男[：:]|女[：:])')
+    SPEAKER_PATTERN = re.compile(r"(男[（(][^）)]*[）)]：|女[（(][^）)]*[）)]：|男[：:]|女[：:])")
 
     segments = []
     last_end = 0
-    current_speaker = 'narrator'  # 开头无前缀就是旁白
+    current_speaker = "narrator"  # 开头无前缀就是旁白
 
     for m in SPEAKER_PATTERN.finditer(voiceover):
         # 先把前一段文本存起来
-        text_before = voiceover[last_end:m.start()].strip()
+        text_before = voiceover[last_end : m.start()].strip()
         if text_before:
             segments.append((current_speaker, text_before))
 
         # 确定当前说话人
         tag = m.group(0)
-        if '男' in tag:
-            current_speaker = 'male'
+        if "男" in tag:
+            current_speaker = "male"
         else:
-            current_speaker = 'female'
+            current_speaker = "female"
         last_end = m.end()
 
     # 最后一段
@@ -253,7 +262,7 @@ def _split_voiceover_by_speaker(voiceover: str) -> list[tuple[str, str]]:
     if remaining:
         segments.append((current_speaker, remaining))
 
-    return segments if segments else [('narrator', voiceover)]
+    return segments if segments else [("narrator", voiceover)]
 
 
 async def _call_minimax_tts(
@@ -282,7 +291,7 @@ async def _call_minimax_tts(
             "bitrate": 128000,
             "format": "mp3",
             "channel": 1,
-        }
+        },
     }
     if emotion and emotion != "neutral":
         payload["voice_setting"]["emotion"] = emotion
@@ -306,7 +315,7 @@ async def _call_minimax_tts(
         base_resp = result.get("base_resp", {})
         status_code = base_resp.get("status_code", 0)
         if status_code in (1002, 1004):
-            wait_sec = 2 ** attempt * 5
+            wait_sec = 2**attempt * 5
             await asyncio.sleep(wait_sec)
             result = None
             continue
@@ -332,11 +341,12 @@ def _concat_mp3_with_ffmpeg(segment_paths: list[str], output_path: str) -> None:
 
     if len(segment_paths) == 1:
         import shutil
+
         shutil.copy2(segment_paths[0], output_path)
         return
 
     # 创建临时文件列表
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
         for p in segment_paths:
             # ffmpeg concat 要求路径用单引号包裹
             f.write(f"file '{p}'\n")
@@ -344,12 +354,17 @@ def _concat_mp3_with_ffmpeg(segment_paths: list[str], output_path: str) -> None:
 
     try:
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", list_file,
-            "-c", "copy",
-            output_path
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            list_file,
+            "-c",
+            "copy",
+            output_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
@@ -406,25 +421,27 @@ async def generate_voiceover_multi_speaker(
     def _resolve_voice(speaker_type: str) -> str:
         if char_voice_map:
             # 如果有角色映射，用角色映射
-            if speaker_type == 'male':
+            if speaker_type == "male":
                 # 找第一个男性角色
                 for cid, voice in char_voice_map.items():
-                    if voice == DEFAULT_VOICE_BY_GENDER['male']:
+                    if voice == DEFAULT_VOICE_BY_GENDER["male"]:
                         return voice
-            elif speaker_type == 'female':
+            elif speaker_type == "female":
                 for cid, voice in char_voice_map.items():
-                    if voice == DEFAULT_VOICE_BY_GENDER['female']:
+                    if voice == DEFAULT_VOICE_BY_GENDER["female"]:
                         return voice
         # 默认映射
-        if speaker_type == 'male':
-            return DEFAULT_VOICE_BY_GENDER['male']
-        elif speaker_type == 'female':
-            return DEFAULT_VOICE_BY_GENDER['female']
+        if speaker_type == "male":
+            return DEFAULT_VOICE_BY_GENDER["male"]
+        elif speaker_type == "female":
+            return DEFAULT_VOICE_BY_GENDER["female"]
         else:
             return NARRATOR_VOICE
 
     if verbose:
-        print(f"[TTS] Scene {scene.scene_id} 拆分成 {len(segments)} 段: {[(s[0], s[1][:15]) for s in segments]}")
+        print(
+            f"[TTS] Scene {scene.scene_id} 拆分成 {len(segments)} 段: {[(s[0], s[1][:15]) for s in segments]}"
+        )
 
     # 并发合成所有段
     seg_dir = os.path.join(output_dir, f"scene_{scene.scene_id:03d}_segments")
@@ -445,7 +462,7 @@ async def generate_voiceover_multi_speaker(
             scene_id=scene.scene_id,
             seg_idx=idx,
         )
-        with open(seg_path, 'wb') as f:
+        with open(seg_path, "wb") as f:
             f.write(audio_bytes)
         if verbose:
             print(f"[TTS] Scene {scene.scene_id} seg{idx} ({speaker_type}/{voice}) 完成")
@@ -459,7 +476,9 @@ async def generate_voiceover_multi_speaker(
 
     duration = get_audio_duration(output_path)
     if verbose:
-        print(f"[TTS] Scene {scene.scene_id} 多人声线合成完成，时长: {duration:.2f}s，保存至: {output_path}")
+        print(
+            f"[TTS] Scene {scene.scene_id} 多人声线合成完成，时长: {duration:.2f}s，保存至: {output_path}"
+        )
 
     return output_path, duration
 
@@ -489,17 +508,19 @@ async def generate_all_voiceovers(
     char_voice_map[0] = NARRATOR_VOICE
     if characters:
         for char in characters:
-            cid = char.character_id if hasattr(char, 'character_id') else char.get('character_id')
+            cid = char.character_id if hasattr(char, "character_id") else char.get("character_id")
             if cid == 0:
                 # character_id=0 是旁白，始终使用 NARRATOR_VOICE
                 char_voice_map[0] = NARRATOR_VOICE
                 continue
-            gender = (char.gender if hasattr(char, 'gender') else char.get('gender', 'female')) or 'female'
+            gender = (
+                char.gender if hasattr(char, "gender") else char.get("gender", "female")
+            ) or "female"
             char_voice_map[cid] = DEFAULT_VOICE_BY_GENDER.get(gender.lower(), "female-shaonv")
     if verbose:
         print(f"[TTS] char_voice_map: {char_voice_map}")
         for s in scenes:
-            resolved = char_voice_map.get(s.speaker_id, voice_id or 'default(config)')
+            resolved = char_voice_map.get(s.speaker_id, voice_id or "default(config)")
             print(f"[TTS] Scene {s.scene_id} speaker_id={s.speaker_id} -> voice={resolved}")
 
     semaphore = asyncio.Semaphore(max_concurrent)
@@ -511,7 +532,9 @@ async def generate_all_voiceovers(
             if scene.speaker_id is None and voiceover_text:
                 # speaker_id=None（对标分析模式）：检查是否有多人对话
                 segments = _split_voiceover_by_speaker(voiceover_text)
-                has_multi_speaker = len(segments) > 1 or (len(segments) == 1 and segments[0][0] != 'narrator')
+                has_multi_speaker = len(segments) > 1 or (
+                    len(segments) == 1 and segments[0][0] != "narrator"
+                )
                 if has_multi_speaker:
                     # 有多人对话：用拆分合成方案
                     path, duration = await generate_voiceover_multi_speaker(
@@ -568,22 +591,25 @@ def generate_all_voiceovers_sync(
     characters: Optional[list] = None,
 ) -> dict[int, tuple[str, float]]:
     """generate_all_voiceovers 的同步版本"""
-    return asyncio.run(generate_all_voiceovers(
-        scenes=scenes,
-        output_dir=output_dir,
-        voice_id=voice_id,
-        emotion=emotion,
-        speed=speed,
-        config=config,
-        max_concurrent=max_concurrent,
-        verbose=verbose,
-        characters=characters,
-    ))
+    return asyncio.run(
+        generate_all_voiceovers(
+            scenes=scenes,
+            output_dir=output_dir,
+            voice_id=voice_id,
+            emotion=emotion,
+            speed=speed,
+            config=config,
+            max_concurrent=max_concurrent,
+            verbose=verbose,
+            characters=characters,
+        )
+    )
 
 
 # ============================================================
 # 音频工具函数
 # ============================================================
+
 
 def get_audio_duration(audio_path: str) -> float:
     """
@@ -622,10 +648,21 @@ def get_audio_duration(audio_path: str) -> float:
     # 最后回退：使用 ffprobe
     try:
         import subprocess
+
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
-            capture_output=True, text=True, timeout=10
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                audio_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             return float(result.stdout.strip())

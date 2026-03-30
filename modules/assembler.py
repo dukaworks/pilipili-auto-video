@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 视频组装模块 - FFmpeg 拼接 + 字幕烧录
 
 职责：
@@ -25,12 +25,14 @@ from modules.llm import Scene, VideoScript
 # 数据结构
 # ============================================================
 
+
 @dataclass
 class AssemblyPlan:
     """组装计划"""
+
     scenes: list[Scene]
-    video_clips: dict[int, str]      # {scene_id: video_path}
-    audio_clips: dict[int, str]      # {scene_id: audio_path}
+    video_clips: dict[int, str]  # {scene_id: video_path}
+    audio_clips: dict[int, str]  # {scene_id: audio_path}
     output_path: str
     temp_dir: str
     add_subtitles: bool = True
@@ -40,19 +42,27 @@ class AssemblyPlan:
 # Windows 兼容的 H.264 编码参数
 # pix_fmt yuv420p + profile high + level 4.1 确保 Windows 自带播放器可播放
 H264_COMPAT_ARGS = [
-    "-c:v", "libx264",
-    "-preset", "fast",
-    "-crf", "18",
-    "-pix_fmt", "yuv420p",
-    "-profile:v", "high",
-    "-level:v", "4.1",
-    "-movflags", "+faststart",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "fast",
+    "-crf",
+    "18",
+    "-pix_fmt",
+    "yuv420p",
+    "-profile:v",
+    "high",
+    "-level:v",
+    "4.1",
+    "-movflags",
+    "+faststart",
 ]
 
 
 # ============================================================
 # 核心组装函数
 # ============================================================
+
 
 def assemble_video(
     plan: AssemblyPlan,
@@ -136,6 +146,7 @@ def assemble_video(
     else:
         # 无字幕，直接复制
         import shutil
+
         shutil.copy2(merged_with_audio, plan.output_path)
 
     if verbose:
@@ -147,6 +158,7 @@ def assemble_video(
 # ============================================================
 # FFmpeg 工具函数
 # ============================================================
+
 
 def _run_ffmpeg(cmd: list[str], verbose: bool = False) -> None:
     """执行 FFmpeg 命令"""
@@ -176,9 +188,14 @@ def _clean_temp_files(temp_dir: str, verbose: bool = False) -> None:
                 print(f"[Assembler] 清理旧临时文件: {f}")
 
 
-def _trim_video(input_path: str, output_path: str, duration: float,
-                target_w: int = 1920, target_h: int = 1080,
-                verbose: bool = False) -> None:
+def _trim_video(
+    input_path: str,
+    output_path: str,
+    duration: float,
+    target_w: int = 1920,
+    target_h: int = 1080,
+    verbose: bool = False,
+) -> None:
     """精确裁剪视频到指定时长，并统一缩放到目标分辨率
 
     使用 scale+pad 方式：先等比缩放到目标尺寸内，再用黑边填充到精确分辨率，
@@ -193,15 +210,23 @@ def _trim_video(input_path: str, output_path: str, duration: float,
         f"setsar=1"
     )
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
-        "-t", str(duration),
-        "-vf", vf,
-    ] + H264_COMPAT_ARGS[:-2] + [  # 不需要 movflags（中间文件）
-        "-an",  # 移除原始音频
-        output_path
-    ]
+    cmd = (
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_path,
+            "-t",
+            str(duration),
+            "-vf",
+            vf,
+        ]
+        + H264_COMPAT_ARGS[:-2]
+        + [  # 不需要 movflags（中间文件）
+            "-an",  # 移除原始音频
+            output_path,
+        ]
+    )
     _run_ffmpeg(cmd, verbose=verbose)
 
 
@@ -220,6 +245,7 @@ def _merge_with_transitions(
     """
     if len(clips) == 1:
         import shutil
+
         shutil.copy2(clips[0], output_path)
         return
 
@@ -246,33 +272,42 @@ def _merge_with_transitions(
         offset = max(offset, 0.001)
 
         # 转场类型映射
-        xfade_type = _map_transition(transitions[i + 1] if i + 1 < len(transitions) else "crossfade")
+        xfade_type = _map_transition(
+            transitions[i + 1] if i + 1 < len(transitions) else "crossfade"
+        )
 
         if i == 0:
             in_label_a = "[0:v]"
             in_label_b = "[1:v]"
         else:
-            in_label_a = f"[v{i-1}{i}]"
-            in_label_b = f"[{i+1}:v]"
+            in_label_a = f"[v{i - 1}{i}]"
+            in_label_b = f"[{i + 1}:v]"
 
-        out_label = f"[v{i}{i+1}]"
+        out_label = f"[v{i}{i + 1}]"
 
         filter_parts.append(
             f"{in_label_a}{in_label_b}xfade=transition={xfade_type}:"
             f"duration={transition_duration}:offset={offset:.3f}{out_label}"
         )
 
-    final_label = f"[v{len(clips)-2}{len(clips)-1}]"
+    final_label = f"[v{len(clips) - 2}{len(clips) - 1}]"
     filter_complex = ";".join(filter_parts)
 
-    cmd = [
-        "ffmpeg", "-y",
-    ] + inputs + [
-        "-filter_complex", filter_complex,
-        "-map", final_label,
-    ] + H264_COMPAT_ARGS + [
-        output_path
-    ]
+    cmd = (
+        [
+            "ffmpeg",
+            "-y",
+        ]
+        + inputs
+        + [
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            final_label,
+        ]
+        + H264_COMPAT_ARGS
+        + [output_path]
+    )
 
     _run_ffmpeg(cmd, verbose=verbose)
 
@@ -304,6 +339,7 @@ def _mix_audio_aligned(
 
     if not valid_entries:
         import shutil
+
         shutil.copy2(video_path, output_path)
         return
 
@@ -337,19 +373,31 @@ def _mix_audio_aligned(
 
     filter_complex = ";".join(filter_parts)
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", video_path,
-    ] + audio_inputs + [
-        "-filter_complex", filter_complex,
-        "-map", "0:v",
-        "-map", "[aout]",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-shortest",
-        output_path
-    ]
+    cmd = (
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+        ]
+        + audio_inputs
+        + [
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "0:v",
+            "-map",
+            "[aout]",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            output_path,
+        ]
+    )
 
     _run_ffmpeg(cmd, verbose=verbose)
 
@@ -386,14 +434,18 @@ def _burn_subtitles(
     # 转义路径中的特殊字符（FFmpeg subtitles 滤镜要求）
     safe_srt_path = srt_path.replace("\\", "/").replace(":", "\\:")
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", video_path,
-        "-vf", f"subtitles={safe_srt_path}:force_style='{style_str}'",
-    ] + H264_COMPAT_ARGS + [
-        "-c:a", "copy",
-        output_path
-    ]
+    cmd = (
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-vf",
+            f"subtitles={safe_srt_path}:force_style='{style_str}'",
+        ]
+        + H264_COMPAT_ARGS
+        + ["-c:a", "copy", output_path]
+    )
 
     _run_ffmpeg(cmd, verbose=verbose)
 
@@ -457,7 +509,7 @@ def _split_subtitle_text(text: str, max_chars: int = 20) -> list[str]:
         # 尝试在标点符号处断行
         split_pos = max_chars
         for i in range(max_chars, 0, -1):
-            if text[i-1] in "，。！？、；：":
+            if text[i - 1] in "，。！？、；：":
                 split_pos = i
                 break
         lines.append(text[:split_pos])
@@ -481,9 +533,19 @@ def _format_srt_time(seconds: float) -> str:
 def _get_video_duration(video_path: str) -> float:
     """使用 ffprobe 获取视频精确时长"""
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-        capture_output=True, text=True, timeout=10
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode == 0:
         return float(result.stdout.strip())

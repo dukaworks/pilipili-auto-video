@@ -1,5 +1,5 @@
 """
-噼哩噼哩 Pilipili-AutoVideo
+芝麻开门 Open-Door
 核心配置加载器 - 支持 YAML 配置文件与环境变量双轨制
 """
 
@@ -28,34 +28,39 @@ class LLMProviderConfig:
 @dataclass
 class LLMConfig:
     default_provider: str = "deepseek"
-    deepseek: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="deepseek-chat",
-        base_url="https://api.deepseek.com/v1"
-    ))
-    kimi: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="moonshot-v1-32k",
-        base_url="https://api.moonshot.cn/v1"
-    ))
-    minimax: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="MiniMax-Text-01",
-        base_url="https://api.minimax.chat/v1"
-    ))
-    zhipu: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="glm-4",
-        base_url="https://open.bigmodel.cn/api/paas/v4"
-    ))
-    gemini: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="gemini-2.5-flash"
-    ))
-    openai: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="gpt-4o",
-        base_url="https://api.openai.com/v1"
-    ))
-    ollama: LLMProviderConfig = field(default_factory=lambda: LLMProviderConfig(
-        model="qwen2.5:latest",
-        base_url="http://localhost:11434/v1",
-        api_key="ollama"
-    ))
+    deepseek: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(
+            model="deepseek-chat", base_url="https://api.deepseek.com/v1"
+        )
+    )
+    kimi: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(
+            model="moonshot-v1-32k", base_url="https://api.moonshot.cn/v1"
+        )
+    )
+    minimax: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(
+            model="MiniMax-Text-01", base_url="https://api.minimax.chat/v1"
+        )
+    )
+    zhipu: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(
+            model="glm-4", base_url="https://open.bigmodel.cn/api/paas/v4"
+        )
+    )
+    gemini: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(model="gemini-2.5-flash")
+    )
+    openai: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(
+            model="gpt-4o", base_url="https://api.openai.com/v1"
+        )
+    )
+    ollama: LLMProviderConfig = field(
+        default_factory=lambda: LLMProviderConfig(
+            model="qwen2.5:latest", base_url="http://localhost:11434/v1", api_key="ollama"
+        )
+    )
 
 
 @dataclass
@@ -79,14 +84,18 @@ class VideoGenProviderConfig:
 @dataclass
 class VideoGenConfig:
     default_provider: str = "kling"
-    kling: VideoGenProviderConfig = field(default_factory=lambda: VideoGenProviderConfig(
-        model="kling-v3",
-        base_url="https://api.klingai.com",
-    ))
-    seedance: VideoGenProviderConfig = field(default_factory=lambda: VideoGenProviderConfig(
-        model="doubao-seedance-1-5-pro-250528",
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
-    ))
+    kling: VideoGenProviderConfig = field(
+        default_factory=lambda: VideoGenProviderConfig(
+            model="kling-v3",
+            base_url="https://api.klingai.com",
+        )
+    )
+    seedance: VideoGenProviderConfig = field(
+        default_factory=lambda: VideoGenProviderConfig(
+            model="doubao-seedance-1-5-pro-250528",
+            base_url="https://ark.cn-beijing.volces.com/api/v3",
+        )
+    )
 
 
 @dataclass
@@ -132,6 +141,16 @@ class ServerConfig:
 
 
 @dataclass
+class AuthConfig:
+    """认证配置"""
+
+    enabled: bool = False  # 是否启用认证（默认关闭，保持单用户兼容）
+    jwt_secret: str = ""  # JWT 密钥（自动生成或手动配置）
+    jwt_expire_hours: int = 24  # Token 过期时间（小时）
+    default_user_id: str = "default_user"  # 单用户模式下的默认用户 ID
+
+
+@dataclass
 class PilipiliConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     image_gen: ImageGenConfig = field(default_factory=ImageGenConfig)
@@ -141,6 +160,7 @@ class PilipiliConfig:
     jianying: JianYingConfig = field(default_factory=JianYingConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -225,12 +245,22 @@ def load_config(config_path: Optional[str] = None) -> PilipiliConfig:
     # 视频生成配置
     if "video_gen" in raw:
         vg = raw["video_gen"]
-        config.video_gen.default_provider = vg.get("default_provider", config.video_gen.default_provider)
+        config.video_gen.default_provider = vg.get(
+            "default_provider", config.video_gen.default_provider
+        )
         for provider in ["kling", "seedance"]:
             if provider in vg:
                 p = vg[provider]
                 provider_cfg = getattr(config.video_gen, provider)
-                for attr in ["api_key", "api_secret", "model", "base_url", "default_duration", "default_ratio", "default_quality"]:
+                for attr in [
+                    "api_key",
+                    "api_secret",
+                    "model",
+                    "base_url",
+                    "default_duration",
+                    "default_ratio",
+                    "default_quality",
+                ]:
                     if attr in p:
                         setattr(provider_cfg, attr, p[attr])
 
@@ -257,7 +287,9 @@ def load_config(config_path: Optional[str] = None) -> PilipiliConfig:
         jy = raw["jianying"]
         config.jianying.enabled = jy.get("enabled", config.jianying.enabled)
         config.jianying.draft_dir = jy.get("draft_dir", config.jianying.draft_dir)
-        config.jianying.capcut_draft_dir = jy.get("capcut_draft_dir", config.jianying.capcut_draft_dir)
+        config.jianying.capcut_draft_dir = jy.get(
+            "capcut_draft_dir", config.jianying.capcut_draft_dir
+        )
 
     # 记忆系统配置
     if "memory" in raw:
@@ -272,6 +304,24 @@ def load_config(config_path: Optional[str] = None) -> PilipiliConfig:
         for attr in ["host", "port", "frontend_port"]:
             if attr in srv:
                 setattr(config.server, attr, srv[attr])
+
+    # 认证配置
+    if "auth" in raw:
+        auth_cfg = raw["auth"]
+        for attr in ["enabled", "jwt_secret", "jwt_expire_hours", "default_user_id"]:
+            if attr in auth_cfg:
+                setattr(config.auth, attr, auth_cfg[attr])
+
+    # 环境变量覆盖（认证配置）
+    auth_enabled = os.environ.get("PILIPILI_AUTH_ENABLED")
+    if auth_enabled:
+        config.auth.enabled = auth_enabled.lower() == "true"
+    jwt_secret = os.environ.get("PILIPILI_JWT_SECRET")
+    if jwt_secret:
+        config.auth.jwt_secret = jwt_secret
+    jwt_expire = os.environ.get("PILIPILI_JWT_EXPIRE_HOURS")
+    if jwt_expire:
+        config.auth.jwt_expire_hours = int(jwt_expire)
 
     return config
 
