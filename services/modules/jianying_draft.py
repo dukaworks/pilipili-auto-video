@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from modules.llm import Scene, VideoScript
+from services.modules.llm import Scene, VideoScript
 
 
 def _get_media_duration(filepath: str) -> Optional[float]:

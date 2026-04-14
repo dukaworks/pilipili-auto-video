@@ -31,7 +31,7 @@ except ImportError:
     _PIL_AVAILABLE = False
 
 from core.config import PilipiliConfig, get_config
-from modules.llm import Scene
+from services.modules.llm import Scene
 
 
 # ============================================================

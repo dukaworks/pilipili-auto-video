@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config import load_config
-from modules.llm import analyze_reference_video_sync
+from services.modules.llm import analyze_reference_video_sync
 
 def main():
     # 加载配置

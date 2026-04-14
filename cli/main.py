@@ -12,30 +12,26 @@ CLI 命令行入口
 
 import os
 import sys
-import json
-import asyncio
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.table import Table
-from rich.text import Text
 from rich import print as rprint
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.config import get_config, load_config, reset_config, PilipiliConfig
-from modules.llm import generate_script_sync, script_to_dict, save_script
-from modules.image_gen import generate_all_keyframes_sync
-from modules.tts import generate_all_voiceovers_sync, update_scene_durations
-from modules.video_gen import generate_all_video_clips_sync
-from modules.assembler import assemble_video, AssemblyPlan
-from modules.jianying_draft import generate_jianying_draft
-from modules.memory import get_memory_manager
+from services.modules.llm import generate_script_sync, script_to_dict, save_script
+from services.modules.image_gen import generate_all_keyframes_sync
+from services.modules.tts import generate_all_voiceovers_sync, update_scene_durations
+from services.modules.video_gen import generate_all_video_clips_sync
+from services.modules.assembler import assemble_video, AssemblyPlan
+from services.modules.jianying_draft import generate_jianying_draft
+from services.modules.memory import get_memory_manager
 
 
 console = Console()
@@ -543,7 +539,7 @@ def _test_llm(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
         messages=[{"role": "user", "content": "请回复'连接成功'四个字"}],
         max_tokens=20,
     )
-    reply = resp.choices[0].message.content.strip()
+    reply = resp.choices[0].message.content.strip() # type: ignore
     return True, f"{provider}/{provider_cfg.model} → {reply}"
 
 
@@ -567,7 +563,7 @@ def _test_image(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
     )
 
     has_image = False
-    for part in response.candidates[0].content.parts:
+    for part in response.candidates[0].content.parts: # type: ignore
         if part.inline_data is not None:
             has_image = True
             break
@@ -629,7 +625,7 @@ def _test_video(config: PilipiliConfig, verbose: bool) -> tuple[bool, str]:
         if not kling_cfg.api_key or not kling_cfg.api_secret:
             return False, "Kling API Key 或 Secret 未配置"
 
-        from modules.video_gen import _generate_kling_jwt
+        from services.modules.video_gen import _generate_kling_jwt
 
         token = _generate_kling_jwt(kling_cfg.api_key, kling_cfg.api_secret)
 

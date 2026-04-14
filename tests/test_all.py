@@ -86,7 +86,7 @@ def test_api_routes():
 # ============================================================
 def test_llm_script():
     from core.config import load_config
-    from modules.llm import generate_script
+    from services.modules.llm import generate_script
 
     config = load_config("configs/config.yaml")
     script = asyncio.run(
@@ -112,8 +112,8 @@ def test_llm_script():
 # ============================================================
 def test_tts():
     from core.config import load_config
-    from modules.tts import generate_voiceover
-    from modules.llm import Scene
+    from services.modules.tts import generate_voiceover
+    from services.modules.llm import Scene
 
     config = load_config("configs/config.yaml")
     scene = Scene(
@@ -142,8 +142,8 @@ def test_tts():
 # ============================================================
 def test_image_gen():
     from core.config import load_config
-    from modules.image_gen import generate_keyframe
-    from modules.llm import Scene
+    from services.modules.image_gen import generate_keyframe
+    from services.modules.llm import Scene
 
     config = load_config("configs/config.yaml")
     scene = Scene(
@@ -173,7 +173,7 @@ def test_image_gen():
 # ============================================================
 def test_kling_api():
     from core.config import load_config
-    from modules.video_gen import _generate_kling_jwt
+    from services.modules.video_gen import _generate_kling_jwt
     import requests
 
     config = load_config("configs/config.yaml")
@@ -204,8 +204,8 @@ def test_kling_api():
 # ============================================================
 def test_jianying_draft():
     from core.config import load_config
-    from modules.llm import Scene, VideoScript
-    from modules.jianying_draft import generate_jianying_draft, _generate_scene_manifest
+    from services.modules.llm import Scene, VideoScript
+    from services.modules.jianying_draft import generate_jianying_draft, _generate_scene_manifest
 
     config = load_config("configs/config.yaml")
 
@@ -263,7 +263,7 @@ def test_jianying_draft():
     print(f"  分镜数: {len(manifest['scenes'])}")
 
     # 测试 EDL 生成
-    from modules.jianying_draft import _generate_edl_fallback
+    from services.modules.jianying_draft import _generate_edl_fallback
 
     edl_dir = "/tmp/test_edl"
     result = _generate_edl_fallback(
@@ -285,7 +285,7 @@ def test_jianying_draft():
 # ============================================================
 def test_reference_analysis():
     from core.config import load_config
-    from modules.llm import analyze_reference_video_sync
+    from services.modules.llm import analyze_reference_video_sync
 
     config = load_config("configs/config.yaml")
 

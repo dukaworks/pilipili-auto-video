@@ -25,9 +25,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.config import PilipiliConfig, get_config, reset_config
-from modules.llm import Scene, VideoScript, script_to_dict, dict_to_script, _parse_json_safely
-from modules.tts import get_audio_duration, update_scene_durations
-from modules.assembler import _format_srt_time, _split_subtitle_text, _map_transition
+from services.modules.llm import Scene, VideoScript, script_to_dict, dict_to_script, _parse_json_safely
+from services.modules.tts import get_audio_duration, update_scene_durations
+from services.modules.assembler import _format_srt_time, _split_subtitle_text, _map_transition
 
 
 # ============================================================
@@ -220,7 +220,7 @@ class TestConfig:
 class TestMemorySystem:
     def test_local_memory_store(self, tmp_path):
         """测试本地 SQLite 记忆存储"""
-        from modules.memory import LocalMemoryStore
+        from services.modules.memory import LocalMemoryStore
 
         db_path = str(tmp_path / "test.db")
         store = LocalMemoryStore(db_path)
@@ -235,7 +235,7 @@ class TestMemorySystem:
 
     def test_procedural_memory(self, tmp_path):
         """测试程序性记忆"""
-        from modules.memory import LocalMemoryStore
+        from services.modules.memory import LocalMemoryStore
 
         db_path = str(tmp_path / "test.db")
         store = LocalMemoryStore(db_path)
@@ -252,7 +252,7 @@ class TestMemorySystem:
 
     def test_memory_manager_context(self, tmp_path):
         """测试记忆管理器构建上下文"""
-        from modules.memory import MemoryManager
+        from services.modules.memory import MemoryManager
 
         config = PilipiliConfig()
         config.memory.local_db_path = str(tmp_path / "mem.db")
@@ -306,7 +306,7 @@ class TestLLMIntegration:
             mock_client_class.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
-            from modules.llm import generate_script
+            from services.modules.llm import generate_script
 
             config = PilipiliConfig()
             config.llm.deepseek.api_key = "test-key"
@@ -328,7 +328,7 @@ class TestLLMIntegration:
 class TestVideoEngineRouting:
     def test_route_to_seedance_for_dialogue(self, sample_scene):
         """对话场景应路由到 Seedance"""
-        from modules.video_gen import smart_route_engine
+        from services.modules.video_gen import smart_route_engine
 
         dialogue_scene = Scene(
             scene_id=1,
@@ -343,7 +343,7 @@ class TestVideoEngineRouting:
 
     def test_route_to_kling_for_action(self):
         """动作场景应路由到 Kling"""
-        from modules.video_gen import smart_route_engine
+        from services.modules.video_gen import smart_route_engine
 
         action_scene = Scene(
             scene_id=1,
@@ -358,7 +358,7 @@ class TestVideoEngineRouting:
 
     def test_route_to_default_for_neutral(self, sample_scene):
         """中性场景使用默认引擎"""
-        from modules.video_gen import smart_route_engine
+        from services.modules.video_gen import smart_route_engine
 
         engine = smart_route_engine(sample_scene, default="kling")
         assert engine == "kling"
@@ -372,7 +372,7 @@ class TestVideoEngineRouting:
 class TestJianyingDraft:
     def test_edl_fallback(self, sample_script, tmp_path):
         """测试 EDL 回退方案"""
-        from modules.jianying_draft import _generate_edl_fallback
+        from services.modules.jianying_draft import _generate_edl_fallback
 
         video_clips = {1: "/tmp/clip1.mp4", 2: "/tmp/clip2.mp4"}
         audio_clips = {1: "/tmp/audio1.mp3", 2: "/tmp/audio2.mp3"}
@@ -415,7 +415,7 @@ class TestEndToEnd:
         if not config.llm.deepseek.api_key and not config.llm.gemini.api_key:
             pytest.skip("未配置 LLM API Key")
 
-        from modules.llm import generate_script_sync
+        from services.modules.llm import generate_script_sync
 
         script = generate_script_sync(
             topic="测试视频",

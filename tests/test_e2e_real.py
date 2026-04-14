@@ -18,9 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config import load_config
-from modules.llm import generate_script, CharacterInfo
-from modules.image_gen import generate_all_keyframes, _FAILED_MODELS, reset_failed_models
-from modules.tts import generate_all_voiceovers
+from services.modules.llm import generate_script, CharacterInfo
+from services.modules.image_gen import generate_all_keyframes, _FAILED_MODELS, reset_failed_models
+from services.modules.tts import generate_all_voiceovers
 
 OUTPUT_DIR = "/tmp/e2e_test_output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)

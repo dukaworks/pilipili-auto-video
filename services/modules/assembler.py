@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
-from modules.llm import Scene, VideoScript
+from services.modules.llm import Scene, VideoScript
 
 
 # ============================================================
@@ -461,7 +461,7 @@ def _generate_srt(
     字幕时间轴需要考虑 xfade 转场重叠：
     第 i 段字幕起始时间 = sum(duration[0..i-1]) - i * transition_duration
     """
-    from modules.tts import get_audio_duration
+    from services.modules.tts import get_audio_duration
 
     srt_lines = []
     index = 1

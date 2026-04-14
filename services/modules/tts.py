@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.config import PilipiliConfig, get_config
-from modules.llm import Scene
+from services.modules.llm import Scene
 
 
 # ============================================================

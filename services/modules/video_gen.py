@@ -28,7 +28,7 @@ from typing import Optional, Literal
 from datetime import datetime
 
 from core.config import PilipiliConfig, get_config
-from modules.llm import Scene
+from services.modules.llm import Scene
 
 
 # ============================================================

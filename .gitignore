@@ -43,6 +43,7 @@ frontend/out/
 *.swp
 *.swo
 .DS_Store
+.rules
 
 # 测试覆盖率
 .coverage
